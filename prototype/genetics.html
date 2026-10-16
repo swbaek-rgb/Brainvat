@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Brainvat · 유전 프로토타입</title>
+<style>
+  body { font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; margin: 24px; color: #222; background: #fafafa; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #777; font-size: 12px; margin-bottom: 16px; }
+  button { font-size: 14px; padding: 6px 14px; margin-right: 6px; cursor: pointer; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
+  .card { background: #fff; border: 1px solid #ddd; padding: 12px; min-width: 260px; flex: 1; }
+  .card h2 { font-size: 14px; margin: 0 0 8px; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { text-align: left; padding: 3px 4px; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
+  th { color: #777; font-weight: normal; }
+  .bar { display: inline-block; height: 8px; background: #bbb; vertical-align: middle; }
+  .bar.g { background: #8ab; }
+  .bar.p { background: #e94; }
+  .num { font-variant-numeric: tabular-nums; color: #555; }
+  .gap-up { color: #2a7; } .gap-dn { color: #c33; }
+  .tag { display: inline-block; background: #eee; border-radius: 3px; padding: 1px 5px; font-size: 11px; margin: 1px; }
+  .mut { background: #fdd; }
+  .note { font-size: 12px; color: #666; line-height: 1.6; }
+  #batch td, #batch th { font-size: 11px; }
+  .legend span { margin-right: 12px; }
+  .ctrl { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+  .ctrl label { color: #555; }
+  input[type=range] { width: 90px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<h1>통 속의 사람 · 유전 생성기 (lo-fi)</h1>
+<div class="sub">부모 둘을 무작위로 뽑고, 유전형 → 출생 시 표현형을 계산합니다. 유전형은 신(플레이어)에게만 보이는 값이고, 표현형은 실제 삶에서 드러나는 값입니다.</div>
+
+<div class="ctrl">
+  <button onclick="gen()">새 사람 뽑기</button>
+  <button onclick="batch(50)">50명 뽑아 분포 보기</button>
+  <label>외모 유전 <input type="range" id="hApp" min="0" max="100" value="85" oninput="syncH()"> <span id="hAppV">85</span>%</label>
+  <label>지능 유전 <input type="range" id="hIq" min="0" max="100" value="60" oninput="syncH()"> <span id="hIqV">60</span>%</label>
+  <label>성격 유전 <input type="range" id="hPer" min="0" max="100" value="45" oninput="syncH()"> <span id="hPerV">45</span>%</label>
+  <label>큰 돌연변이 확률 <input type="range" id="mut" min="0" max="30" value="15" oninput="syncH()"> <span id="mutV">15</span>%</label>
+</div>
+<div class="legend sub" style="margin-top:8px">
+  <span><i class="bar g" style="width:20px"></i> 유전형(잠재)</span>
+  <span><i class="bar p" style="width:20px"></i> 표현형(출생 시 실제)</span>
+  <span><span class="tag mut">돌연변이</span> 부모 평균에서 크게 벗어난 특성</span>
+</div>
+
+<div class="row" id="out"></div>
+<div class="row" id="batchWrap" style="display:none">
+  <div class="card" style="flex:1">
+    <h2>50명 분포 (표현형 기준)</h2>
+    <div id="hist"></div>
+    <table id="batch"></table>
+  </div>
+</div>
+
+
+<script src="genetics.js"></script>
+<script>
+// ---------- 렌더 ----------
+function bar(v, cls) { return `<i class="bar ${cls}" style="width:${v * 0.8}px"></i> <span class="num">${v}</span>`; }
+
+function parentCard(p, role) {
+  let rows = "";
+  for (const g in TRAITS) for (const [k, l] of TRAITS[g]) rows += `<tr><th>${l}</th><td>${bar(p.geno[k], "g")}</td></tr>`;
+  return `<div class="card"><h2>${role} · ${p.name} (${p.age}세)</h2>
+    <table>${rows}<tr><th>재산</th><td>${bar(p.wealth, "")}</td></tr><tr><th>학력</th><td>${bar(p.edu, "")}</td></tr></table></div>`;
+}
+
+function childCard(c) {
+  let rows = "";
+  for (const g in TRAITS) for (const [k, l] of TRAITS[g]) {
+    const d = c.pheno[k] - c.geno[k];
+    const dcls = d > 0 ? "gap-up" : d < 0 ? "gap-dn" : "";
+    rows += `<tr><th>${l}${c.mut[k] ? ' <span class="tag mut">변이</span>' : ""}</th>
+      <td>${bar(c.geno[k], "g")}<br>${bar(c.pheno[k], "p")} <span class="${dcls}">${d >= 0 ? "+" : ""}${d}</span></td>
+      <td class="num" title="환경값 / 운값">env ${c.env[k]} · luck ${c.luck[k]}</td></tr>`;
+  }
+  const h = c.home, ps = prayerStyle(c);
+  return `<div class="card" style="flex:2"><h2>아이 · ${c.name} (${c.sex === "M" ? "남" : "여"}) · 출생 시점</h2>
+    <table>${rows}</table>
+    <div class="note" style="margin-top:8px">
+      <b>가정환경</b>
+      <span class="tag">온기 ${h.warmth}</span><span class="tag">규율 ${h.structure}</span><span class="tag">자극 ${h.stimulus}</span><span class="tag">재산 ${h.wealth}</span><span class="tag">안정 ${h.stability}</span><br>
+      <b>한 줄 묘사</b> ${describe(c).join(" · ")}<br>
+      <b>기도 성향(예상)</b> 빈도 ${ps.freq}/100 · ${ps.type}
+    </div></div>`;
+}
+
+let last = null;
+function gen() {
+  const m = makeParent("F"), f = makeParent("M");
+  const c = makeChild(m, f);
+  last = { m, f, c };
+  document.getElementById("out").innerHTML = parentCard(m, "어머니") + parentCard(f, "아버지") + childCard(c);
+  document.getElementById("batchWrap").style.display = "none";
+}
+
+function batch(n) {
+  const kids = [];
+  for (let i = 0; i < n; i++) { const m = makeParent("F"), f = makeParent("M"); kids.push(makeChild(m, f)); }
+  // 히스토그램: 지능 표현형
+  const bins = new Array(10).fill(0);
+  kids.forEach(c => bins[Math.min(9, Math.floor(c.pheno.iq / 10))]++);
+  const hist = bins.map((b, i) => `<div style="font-size:11px"><span class="num" style="display:inline-block;width:52px">${i * 10}-${i * 10 + 9}</span>${"█".repeat(b)} ${b}</div>`).join("");
+  document.getElementById("hist").innerHTML = `<div class="note">지능 표현형 분포</div>${hist}<br>`;
+
+  let head = "<tr><th>#</th><th>이름</th>";
+  for (const g in TRAITS) for (const [, l] of TRAITS[g]) head += `<th>${l}</th>`;
+  head += "<th>지능 격차</th><th>묘사</th></tr>";
+  const body = kids.map((c, i) => {
+    let tds = "";
+    for (const g in TRAITS) for (const [k] of TRAITS[g]) tds += `<td class="num ${c.mut[k] ? "mut" : ""}">${c.geno[k]}→${c.pheno[k]}</td>`;
+    const gap = c.pheno.iq - c.geno.iq;
+    return `<tr><td>${i + 1}</td><td>${c.name}</td>${tds}<td class="${gap > 0 ? "gap-up" : gap < 0 ? "gap-dn" : ""}">${gap >= 0 ? "+" : ""}${gap}</td><td style="white-space:normal;font-size:10px;color:#666">${describe(c).join(" · ")}</td></tr>`;
+  }).join("");
+  document.getElementById("batch").innerHTML = head + body;
+  document.getElementById("out").innerHTML = "";
+  document.getElementById("batchWrap").style.display = "flex";
+}
+
+function syncH() {
+  const v = id => +document.getElementById(id).value;
+  H.app = v("hApp") / 100; H.iq = v("hIq") / 100; H.per = v("hPer") / 100;
+  BIG_MUT = v("mut") / 100;
+  // 환경 비중은 남은 몫의 일정 비율로 자동 조정 (나머지가 운)
+  ENV_SHARE.app = (1 - H.app) * 0.67; ENV_SHARE.iq = (1 - H.iq) * 0.75; ENV_SHARE.per = (1 - H.per) * 0.73;
+  for (const [id, sp] of [["hApp", "hAppV"], ["hIq", "hIqV"], ["hPer", "hPerV"], ["mut", "mutV"]])
+    document.getElementById(sp).textContent = v(id);
+}
+
+gen();
+</script>
+</body>
+</html>

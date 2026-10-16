@@ -1,0 +1,869 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Brainvat · 통 하나에서 시작</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@latest/dist/galmuri.css">
+<style>
+  /* 시안 팔레트: 검정 / 어두운 액체 / 분홍 회색 / 뼈색 */
+  :root { --bg: #0b0a09; --panel: #131110; --panel2: #1a1716; --line: #2e2827; --line2: #4a403d;
+          --fg: #d6c2bb; --bone: #efe3dd; --mute: #84756f; --dim: #4a403d;
+          --accent: var(--bone); --good: var(--bone); --bad: var(--mute); --cost: #a08c86; --faith: var(--bone); }
+  * { box-sizing: border-box; }
+  body { font-family: "Galmuri11", "Galmuri9", -apple-system, "Apple SD Gothic Neo", sans-serif; margin: 0; background: var(--bg); color: var(--fg); height: 100vh; display: flex; flex-direction: column; font-size: 13px; -webkit-font-smoothing: none; }
+  /* 픽셀 패널: 안쪽 어두운 선 + 바깥 밝은 선 두 겹 */
+  .px { border: 2px solid var(--line2); box-shadow: inset 0 0 0 2px var(--bg), inset 0 0 0 3px var(--line); }
+  #bar { padding: 8px 14px; border-bottom: 2px solid var(--line2); background: var(--panel); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; font-size: 12px; color: var(--mute); }
+  #bar .grp { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; } #bar .grp.right { justify-content: flex-end; }
+  /* 1년 넘기기: 화면 아래 가운데, 항상 손 닿는 곳에 */
+  #step { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 8; display: flex; align-items: center; gap: 14px; padding: 10px 22px 10px 18px; font-size: 15px; background: var(--bg); color: var(--bone); border: 2px solid var(--bone); box-shadow: 4px 4px 0 var(--line2); }
+  #step:hover { background: var(--panel2); } #step:active { transform: translate(calc(-50% + 3px), 3px); box-shadow: 1px 1px 0 var(--line2); }
+  #step .yr { font-size: 11px; color: var(--mute); } #step .main { font-weight: 700; letter-spacing: 1px; }
+  #step .key { font-size: 10px; color: var(--mute); border: 1px solid var(--line2); padding: 1px 6px; }
+  #step.flash { background: var(--bone); color: var(--bg); }
+  button { font-family: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer; background: var(--bg); color: var(--fg); border: 2px solid var(--line2); border-radius: 0; box-shadow: 2px 2px 0 var(--line); }
+  button:hover { border-color: var(--fg); color: var(--bone); }
+  button:active { transform: translate(2px, 2px); box-shadow: none; }
+  button.g { background: var(--bone); color: var(--bg); border-color: var(--bone); font-weight: 700; }
+  button.d { border-color: var(--mute); color: var(--fg); }
+  button.s { border-color: var(--line2); color: var(--mute); }
+  input[type=number] { font-family: inherit; background: var(--bg); color: var(--fg); border: 2px solid var(--line2); border-radius: 0; padding: 2px 6px; width: 44px; font-size: 12px; }
+  input[type=checkbox] { accent-color: var(--mute); }
+  #cols { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 6px; background: var(--bg); min-height: 0; }
+  .col { background: var(--panel); display: flex; flex-direction: column; min-height: 0; min-width: 0; border: 2px solid var(--line2); box-shadow: inset 0 0 0 2px var(--bg), inset 0 0 0 3px var(--line); }
+  .head { padding: 12px 14px 8px; }
+  .head .nm { font-size: 16px; font-weight: 700; color: var(--bone); letter-spacing: .5px; } .head .nm .num { margin-left: 6px; font-weight: 400; }
+  .head.dead .nm { color: var(--mute); text-decoration: line-through; text-decoration-color: var(--line2); }
+  .kv { display: flex; gap: 10px; margin-top: 4px; color: var(--mute); font-size: 11px; flex-wrap: wrap; min-height: 32px; align-content: flex-start; }
+  .kv b { color: var(--fg); font-weight: 500; }
+  /* 유산 배지 */
+  .badge { display: inline-flex; align-items: center; gap: 3px; padding: 0 6px 0 4px; height: 18px; border: 1px solid; font-size: 11px; line-height: 1; cursor: help; }
+  .badge i { font-style: normal; } .badge .dir { font-size: 10px; opacity: .7; } .badge .kind { font-size: 11px; } .badge b { font-weight: 700; color: inherit; }
+  .badge.good { color: var(--c-pos, var(--bone)); border-color: var(--c-pos, var(--bone)); background: rgba(223,163,174,.08); }
+  .badge.bad { color: var(--c-neg, var(--cost)); border-color: var(--c-neg, var(--cost)); background: rgba(168,90,82,.10); }
+  .badge.in { border-style: dashed; }   /* 물려받은 것은 점선, 남길 것은 실선 */
+  /* 호버 설명: data-tip 속성이 있는 요소 아래에 바로 뜬다 */
+  [data-tip] { position: relative; cursor: help; }
+  .tipb { border-bottom: 1px dotted var(--line2); }
+  [data-tip]::after { content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: max-content; max-width: 260px; padding: 6px 9px;
+    background: var(--bg); color: var(--fg); border: 2px solid var(--bone); box-shadow: 3px 3px 0 var(--line2); font-size: 11px; line-height: 1.5; white-space: normal; font-weight: 400; letter-spacing: 0;
+    opacity: 0; transform: translateY(-3px); pointer-events: none; transition: opacity .12s, transform .12s; }
+  [data-tip]:hover::after { opacity: 1; transform: translateY(0); }
+  [data-tip].tip-left::after { left: auto; right: 0; }
+  .tankwrap { display: flex; justify-content: center; padding: 2px 0 0; }
+  .tank { width: 256px; height: 208px; image-rendering: pixelated; background-repeat: no-repeat; background-size: 768px 256px; background-position: 0 -24px; }
+  .tank.normal { background-image: url(sprites/tank_sheet.png); animation: bub 1.2s steps(3) infinite; }
+  .tank.praying { background-image: url(sprites/tank_praying.png); background-size: 256px 256px; animation: glow 1.6s ease-in-out infinite; }
+  .tank.dead { background-image: url(sprites/tank_dead.png); background-size: 256px 256px; opacity: .8; }
+  @keyframes bub { from { background-position-x: 0; } to { background-position-x: -768px; } }
+  /* 연출 상태 */
+  .tankwrap { position: relative; cursor: pointer; }
+  .tank.locked { background-image: url(sprites/tank_empty.png); background-size: 256px 256px; opacity: .3; animation: none; }
+  .col.locked { opacity: .9; }
+  .col.locked .tankwrap { cursor: default; }
+  .lockhead { padding: 10px 14px 6px; min-height: 64px; }
+  .lockhead .nm { font-size: 15px; color: var(--dim); letter-spacing: 2px; }
+  .lockhead .kv { color: var(--dim); }
+  .lockbox { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 12px; padding: 24px 16px; text-align: center; color: var(--mute); font-size: 12px; line-height: 1.7; }
+  .lockbox .cost { font-size: 20px; color: var(--c-faith); letter-spacing: 2px; }
+  .lockbox .cost.short { color: var(--dim); }
+  .lockbox button.g { min-width: 180px; padding: 8px 14px; font-size: 13px; }
+  .lockbox button[disabled] { opacity: .35; cursor: not-allowed; box-shadow: none; }
+  .lockbox .tip { color: var(--dim); font-size: 11px; max-width: 260px; }
+  #intro .tanks .tank.locked { opacity: .08; }
+  .tank.still { animation-play-state: paused; filter: brightness(.85); }          /* 나쁜 일 뒤 기포가 멈춘다 */
+  .tank.shake1 { animation: bub 1.2s steps(3) infinite, shake .5s steps(2) 3; }
+  .tank.shake2 { animation: bub 1.2s steps(3) infinite, shake .4s steps(2) 6; }
+  .tank.praying.shake1, .tank.praying.shake2, .tank.dead.shake1, .tank.dead.shake2 { animation-name: shake; animation-duration: .45s; animation-timing-function: steps(2); animation-iteration-count: 4; }
+  @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+  .tank.twitch { animation: bub 1.2s steps(3) infinite, twitch .25s steps(2) 1; }
+  @keyframes twitch { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+  .tank.dimfx { filter: brightness(.6); transition: filter .15s; }
+  #fxc { position: fixed; inset: 0; pointer-events: none; z-index: 9; image-rendering: pixelated; }
+  @keyframes glow { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.3); } }
+  .traits { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; padding: 4px 14px 8px; border-top: 2px dotted var(--line); border-bottom: 2px dotted var(--line); margin: 0 6px; }
+  .tr { font-size: 10px; color: var(--mute); text-align: center; }
+  .tr .bars { height: 34px; display: flex; align-items: flex-end; justify-content: center; gap: 2px; margin-bottom: 3px; }
+  .tr i { display: block; width: 8px; } .tr i.b { background: var(--line2); } .tr i.p { background: var(--fg); }
+  .tr .v { color: var(--bone); font-size: 11px; }
+  .past { min-height: 34px; padding: 4px 14px; font-size: 11px; color: var(--mute); line-height: 1.4; }
+  .past b { color: var(--bone); font-weight: 500; letter-spacing: 1px; } .past .z { color: var(--dim); }
+  .past .last { color: var(--fg); font-style: italic; }
+  .fam { display: none; background: var(--panel2); border-top: 2px solid var(--line); border-bottom: 2px solid var(--line); padding: 10px 14px; font-size: 11px; }
+  .fam.on { display: block; }
+  .fam h4 { margin: 0 0 4px; font-size: 11px; color: var(--mute); font-weight: normal; }
+  .fam .pp { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+  .fam .row { display: flex; justify-content: space-between; padding: 1px 0; color: var(--mute); }
+  .fam .row b { color: var(--fg); font-weight: 500; }
+  .fam .row i { display: inline-block; height: 6px; background: var(--line2); vertical-align: middle; margin-right: 6px; }
+  .fam .env { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; text-align: center; }
+  .fam .env .v { color: var(--bone); font-size: 13px; }
+  button.sm { padding: 1px 7px; font-size: 11px; margin-left: 6px; box-shadow: none; }
+  .retro { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--panel2); border-top: 2px solid var(--bone); padding: 12px 14px 14px; margin: 0 6px 6px; font-size: 12px; line-height: 1.5; }
+  .retro .rt { color: var(--mute); font-size: 11px; }
+  .retro .rl { color: var(--c-pray, var(--bone)); font-style: italic; font-size: 14px; margin: 6px 0 4px; }
+  .retro .rs { color: var(--c-faith, var(--bone)); font-style: normal; font-size: 15px; letter-spacing: 2px; margin-left: 6px; }
+  .retro .rw { color: var(--fg); margin-bottom: 4px; }
+  .retro .need { color: var(--c-neg, var(--mute)); font-size: 11px; margin-bottom: 8px; }
+  .retro .chips { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 6px; font-size: 11px; }
+  .retro .chip span { color: var(--mute); margin-right: 4px; } .retro .chip b { color: var(--fg); font-weight: 500; }
+  .retro .rh { color: var(--mute); font-size: 11px; border-bottom: 1px solid var(--line); margin: 6px 0 4px; padding-bottom: 2px; }
+  .retro .rpl { flex: 1; min-height: 0; overflow: hidden; }
+  .retro .rp { margin: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .retro .rp i { color: var(--fg); }
+  .retro button.g { margin-top: 10px; width: 100%; font-size: 13px; padding: 8px; }
+  .slot { background: var(--panel2); border-top: 2px solid var(--line2); border-bottom: 2px solid var(--line2); padding: 10px 14px; min-height: 92px; margin: 0 6px; }
+  .slot .empty { color: var(--dim); font-size: 12px; padding-top: 24px; text-align: center; letter-spacing: 2px; }
+  .pr { border: 2px solid var(--fg); padding: 6px 10px; margin-bottom: 8px; background: var(--bg); }
+  .pr .who { font-size: 11px; color: var(--mute); } .pr .q { font-style: italic; margin: 3px 0; line-height: 1.4; color: var(--bone); } .pr .left { font-size: 11px; color: var(--mute); }
+  .pr .btns { margin-top: 6px; display: flex; gap: 6px; }
+  /* 기도 응답 버튼 셋은 크기·굵기·그림자를 똑같이. 색만 다르다 */
+  .pr .btns button { font-size: 12px; font-weight: 400; padding: 4px 12px; box-shadow: 2px 2px 0 var(--line2); min-width: 64px; }
+  .tl { flex: 1; overflow-y: auto; padding: 10px 14px 70px; line-height: 1.5; font-size: 12px; }
+  .tl::-webkit-scrollbar { width: 8px; } .tl::-webkit-scrollbar-thumb { background: var(--line2); border: 2px solid var(--panel); }
+  .y { color: var(--dim); font-size: 11px; display: inline-block; width: 36px; text-indent: 0; }
+  .ev { margin: 3px 0; padding-left: 36px; text-indent: -36px; } .ev .n, .ev .d { white-space: nowrap; } .ev.quiet { color: var(--dim); }
+  .n { font-weight: 700; margin-right: 5px; color: var(--bone); } .d { color: var(--mute); font-size: 10px; margin-left: 5px; }
+  .ev.luck .n::before { content: "◇ "; color: var(--mute); } .ev.trait .n::before { content: "■ "; color: var(--mute); } .ev.fork .n::before { content: "⟡ "; color: var(--mute); } .ev.other .n::before { content: "† "; color: var(--mute); }
+  .pray { margin: 6px 0 6px 36px; padding: 6px 10px; background: var(--bg); border: 2px solid var(--line2); } .pray .q { font-style: italic; color: var(--bone); }
+  .ans { margin-left: 36px; color: var(--mute); } .ans.grant { color: var(--bone); } .ans.deny { color: var(--fg); } .ans.silence { color: var(--mute); }
+  .ans.grant::before { content: "● "; } .ans.deny::before { content: "○ "; } .ans.silence::before { content: "· "; }
+  .cost { margin-left: 36px; color: var(--cost); font-style: italic; } .note { margin-left: 36px; color: var(--fg); } .faith { margin-left: 36px; font-size: 11px; color: var(--mute); }
+  .num { font-variant-numeric: tabular-nums; color: var(--mute); font-size: 11px; }
+  .death { margin: 12px 0; padding: 10px; background: var(--bg); border: 2px solid var(--fg); }
+  table { border-collapse: collapse; font-size: 11px; } th { text-align: left; color: var(--mute); font-weight: normal; padding: 2px 6px 2px 0; vertical-align: top; } td { padding: 2px 0; }
+  .death b { font-size: 13px; color: var(--bone); }
+  #score { display: flex; align-items: center; gap: 12px; padding: 4px 14px; background: var(--bg); border: 2px solid var(--fg); box-shadow: 3px 3px 0 var(--line2); }
+  #score .big { font-size: 22px; font-weight: 700; color: var(--bone); line-height: 1; }
+  #score .lbl { font-size: 10px; color: var(--mute); }
+  #score .hist { font-size: 14px; letter-spacing: 1px; color: var(--bone); }
+  #score .hist .z { color: var(--dim); }
+  #score { cursor: pointer; } #score:hover { background: var(--panel2); }
+  #rules { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.72); z-index: 15; align-items: center; justify-content: center; }
+  #rules.on { display: flex; }
+  #rules .box { width: 760px; max-height: 88vh; overflow-y: auto; background: var(--panel); border: 2px solid var(--bone); box-shadow: 6px 6px 0 var(--line2); padding: 18px 22px; font-size: 12px; line-height: 1.6; }
+  #rules .ttl { font-size: 16px; font-weight: 700; color: var(--bone); margin-bottom: 8px; }
+  #rules .lead { color: var(--fg); margin: 6px 0 12px; } #rules .lead b { color: var(--bone); }
+  #rules .rt { width: 100%; margin-bottom: 14px; } #rules .rt th { border-bottom: 2px solid var(--line2); padding: 4px 8px 4px 0; }
+  #rules .rt td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--fg); }
+  #rules .rt td:first-child { color: var(--bone); white-space: nowrap; letter-spacing: 1px; } #rules .rt td.z { color: var(--dim); }
+  #rules .rt td:nth-child(2) { white-space: nowrap; font-style: italic; color: var(--bone); } #rules .rt td:nth-child(3) { color: var(--mute); }
+  #rules .pri { display: inline-block; font-size: 10px; color: var(--c-neg, #a85a52); border: 1px solid var(--c-neg, #a85a52); padding: 0 4px; margin-left: 4px; vertical-align: middle; }
+  #rules .cols2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; color: var(--mute); margin-bottom: 10px; } #rules .cols2 b { color: var(--fg); }
+  #arch { display: none; position: fixed; left: 0; right: 0; bottom: 0; height: 45vh; background: var(--panel); border-top: 2px solid var(--line2); overflow-y: auto; padding: 12px 16px; z-index: 5; }
+  #arch.on { display: block; }
+  #arch { height: 55vh; padding: 10px 16px 72px; }
+  #arch .ah { display: flex; align-items: baseline; gap: 14px; color: var(--mute); font-size: 11px; border-bottom: 2px solid var(--line2); padding-bottom: 6px; margin-bottom: 4px; }
+  #arch .ah b { color: var(--bone); font-size: 13px; }
+  #arch .pe { border-bottom: 1px solid var(--line); }
+  #arch .pe .sum { display: grid; grid-template-columns: 22px 150px 190px 100px 1fr; gap: 12px; align-items: baseline; padding: 7px 4px; font-size: 12px; cursor: pointer; }
+  #arch .pe .sum:hover { background: var(--panel2); }
+  #arch .pe .sum .tri { color: var(--dim); font-size: 10px; } #arch .pe.on .sum .tri { color: var(--bone); }
+  #arch .pe .sum .nm { color: var(--bone); } #arch .pe .sum .nm .num { margin-left: 6px; }
+  #arch .pe .sum .life { color: var(--fg); } #arch .pe .sum .life.alive { color: var(--c-pos, var(--bone)); }
+  #arch .pe .sum .stars { color: var(--c-faith, var(--bone)); letter-spacing: 2px; } #arch .pe .sum .stars .z { color: var(--dim); }
+  #arch .pe .sum .lp { color: var(--bone); font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } #arch .pe .sum .lp.none { color: var(--dim); font-style: normal; }
+  #arch .pe .det { display: none; padding: 4px 4px 14px 34px; font-size: 12px; }
+  #arch .pe.on .det { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 28px; }
+  #arch .det h5 { margin: 6px 0 4px; color: var(--mute); font-size: 11px; font-weight: 400; border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+  #arch .det .why { color: var(--fg); margin-bottom: 4px; }
+  #arch .det .tl7 { display: flex; gap: 10px; flex-wrap: wrap; }
+  #arch .det .tl7 span { color: var(--mute); } #arch .det .tl7 b { color: var(--fg); font-weight: 500; }
+  #arch .det .tl7 .up { color: var(--c-pos, var(--bone)); } #arch .det .tl7 .dn { color: var(--c-neg, var(--mute)); }
+  #arch .det .kv2 { display: flex; flex-wrap: wrap; gap: 4px 14px; } #arch .det .kv2 span { color: var(--mute); } #arch .det .kv2 b { color: var(--fg); font-weight: 500; }
+  #arch .det .rp { margin: 2px 0; display: grid; grid-template-columns: 40px 70px 1fr; gap: 8px; } #arch .det .rp i { color: var(--fg); } #arch .det .rp .res { color: var(--mute); font-size: 11px; grid-column: 2 / 4; }
+  #arch .det .ledger { color: var(--cost); font-size: 11px; }
+  #arch .empty { color: var(--dim); padding: 24px 0; text-align: center; letter-spacing: 2px; }
+  .st-grant { color: var(--bone); } .st-deny { color: var(--fg); } .st-silence, .st-expired { color: var(--mute); } .st-last { color: var(--bone); }
+
+  /* ---------- 튜토리얼 툴팁 ---------- */
+  #tour { display: none; position: fixed; inset: 0; z-index: 15; }
+  #tour.on { display: block; }
+  #tourHl { position: absolute; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .72); border: 2px solid var(--bone); outline: 2px solid var(--bg); pointer-events: none; transition: left .35s, top .35s, width .35s, height .35s; animation: tourpulse 1.6s ease-in-out infinite; }
+  @keyframes tourpulse { 0%, 100% { border-color: var(--bone); } 50% { border-color: var(--line2); } }
+  #tourBox { position: absolute; width: 340px; background: var(--panel); color: var(--fg); border: 2px solid var(--bone); box-shadow: 4px 4px 0 var(--line2); padding: 12px 14px; font-size: 12px; line-height: 1.7; transition: left .35s, top .35s; }
+  #tourBox .tt { color: var(--bone); font-size: 14px; margin-bottom: 6px; letter-spacing: 1px; }
+  #tourBox .tx b { color: var(--bone); font-weight: 500; }
+  #tourBox .tb { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+  #tourBox .tb button { margin-left: 6px; }
+  #tourBox::before { content: ""; position: absolute; width: 10px; height: 10px; background: var(--bone); }
+  #tourBox.pos-right::before { left: -7px; top: 18px; }
+  #tourBox.pos-below::before { top: -7px; left: calc(50% - 5px); }
+  #tourBox.pos-above::before { bottom: -7px; left: calc(50% - 5px); }
+  /* ---------- 인트로 ---------- */
+  #intro { position: fixed; inset: 0; background: #000; z-index: 20; display: none; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
+  #intro.on { display: flex; }
+  #intro .pic { position: relative; width: 640px; height: 360px; margin-bottom: 28px; opacity: 0; transition: opacity 1.2s; }
+  #intro .pic.show { opacity: 1; }
+  #intro .pic img { position: absolute; inset: 0; width: 640px; height: 360px; image-rendering: pixelated; }
+  #intro .pic canvas { position: absolute; inset: 0; width: 640px; height: 360px; image-rendering: pixelated; }
+  #intro .txt { width: 640px; min-height: 170px; font-size: 15px; line-height: 1.9; color: var(--fg); white-space: pre-wrap; }
+  #intro .txt .cur::after { content: "▌"; color: var(--bone); animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  #intro .hint { position: fixed; bottom: 22px; right: 28px; font-size: 11px; color: var(--dim); }
+  #intro .skip { position: fixed; top: 16px; right: 20px; }
+  #intro .tanks { display: flex; gap: 24px; height: 208px; margin-bottom: 28px; }
+  #intro .tanks .tank { opacity: .15; transition: opacity .6s; }
+  #intro .tanks .tank.lit { opacity: 1; }
+  #intro.fade { transition: opacity 1.4s; opacity: 0; pointer-events: none; }
+  #intro .day { font-size: 18px; color: var(--bone); letter-spacing: 1px; }
+
+  /* ===== 색 역할 (온도 · 분홍/갈색) =====
+     좋은 일은 차분한 장밋빛, 나쁜 일은 마른 핏빛 적갈색. 기도는 옅은 분홍빛 흰색.
+     --c-trait/--c-luck/--c-fork/--c-other(사건 종류) --c-pray(기도) --c-grant/--c-deny/--c-silence(응답)
+     --c-cost(대가) --c-faith(신앙·점수) --c-pos/--c-neg(좋은 일/나쁜 일) --c-major(중요 사건 표식) */
+  :root { --c-trait: var(--bone); --c-luck: var(--bone); --c-fork: var(--bone); --c-other: var(--bone);
+    --c-pray: #f3e4e6; --c-grant: #dfa3ae; --c-deny: #a85a52; --c-silence: var(--mute); --c-cost: #a85a52; --c-faith: #e4bcc3;
+    --c-pos: #dfa3ae; --c-neg: #a85a52; --c-major: #f3e4e6; }
+  /* 역할 변수를 실제 요소에 연결 */
+  .ev.trait .n { color: var(--c-trait); } .ev.luck .n { color: var(--c-luck); } .ev.fork .n { color: var(--c-fork); } .ev.other .n { color: var(--c-other); }
+  .ev.trait .n::before, .ev.luck .n::before, .ev.fork .n::before, .ev.other .n::before { color: inherit; opacity: .7; }
+  .ev.pos .n, .ev.pos .d { color: var(--c-pos); }
+  .ev.neg .n, .ev.neg .d { color: var(--c-neg); }
+  .ev.major .n { color: var(--c-major); } .ev.major { border-left: 2px solid var(--c-major); padding-left: 34px; margin-left: 0; }
+  .pray, .pr { border-color: var(--c-pray); } .pray .q, .pr .q { color: var(--c-pray); }
+  .slot .pr { box-shadow: 0 0 0 1px var(--bg), 0 0 14px -4px var(--c-pray); }
+  button.g { background: var(--c-grant); border-color: var(--c-grant); color: var(--bg); } button.d { border-color: var(--c-deny); color: var(--c-deny); }
+  .ans.grant { color: var(--c-grant); } .ans.deny { color: var(--c-deny); } .ans.silence { color: var(--c-silence); }
+  .cost { color: var(--c-cost); } .faith { color: var(--c-faith); }
+  .st-grant { color: var(--c-grant); } .st-deny { color: var(--c-deny); }
+  #score { border-color: var(--c-faith); } #score .big, #score .hist, .past b { color: var(--c-faith); }
+  .tank.praying { filter: drop-shadow(0 0 10px var(--c-pray)); }
+</style>
+</head>
+<body>
+<div id="bar">
+  <div class="grp">
+    <label title="기본값. 최근 20년에 4회 들어줄 때마다 1년씩 짧아짐 (최소 1년)">응답 기한 <input type="number" id="win" value="3" min="1" max="20" onchange="OPT.prayerWindow=+this.value;render()"> 년</label>
+    <button class="sm" onclick="introStart(true)" title="인트로와 튜토리얼 다시 보기">튜토리얼 다시 보기</button>
+    <button class="sm" onclick="exportSave()" title="저장본을 JSON 파일로 내려받기">내보내기</button>
+    <button class="sm" onclick="document.getElementById('importFile').click()" title="JSON 저장본 불러오기">불러오기</button><input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="importSave(this)">
+    <button class="sm" onclick="wipeSave()" title="저장본을 지우고 처음부터">실험 폐기</button>
+  </div>
+  <div id="score" onclick="document.getElementById('rules').classList.toggle('on')" title="클릭: 점수 규칙 보기"><div><div class="big" id="scoreNum">0</div><div class="lbl">실험 점수 <span id="scoreSpent" class="num"></span></div></div><div><div class="hist" id="scoreHist">—</div><div class="lbl">최근 인생 (오른쪽이 최신)</div></div></div>
+  <div class="grp right">
+    <span id="status"></span>
+    <button class="sm" onclick="document.getElementById('arch').classList.toggle('on')">관측 일지</button>
+  </div>
+</div>
+<button id="step" onclick="run(1)" title="스페이스바로도 넘길 수 있습니다"><span class="yr" id="stepYear">실험 1년차</span><span class="main">1년 넘기기</span><span class="key">SPACE</span></button>
+<div id="cols"></div>
+<canvas id="fxc"></canvas>
+<div id="tour"><div id="tourHl"></div><div id="tourBox"></div></div>
+<div id="intro" onclick="introClick()">
+  <button class="skip" onclick="event.stopPropagation(); introEnd()">건너뛰기</button>
+  <div class="pic" id="introPic"><img id="introImg" alt=""><canvas id="dust" width="320" height="180"></canvas></div>
+  <div class="tanks" id="introTanks" style="display:none"></div>
+  <div class="txt" id="introTxt"></div>
+  <div class="hint">클릭: 다음 줄 · 길게 보려면 그냥 두세요</div>
+</div>
+<div id="arch"></div>
+<div id="rules" onclick="if(event.target===this)this.classList.remove('on')">
+  <div class="box">
+    <div class="ttl">실험 점수 규칙 <button class="sm" style="float:right" onclick="document.getElementById('rules').classList.remove('on')">닫기</button></div>
+    <p class="lead"><b>통은 하나로 시작한다.</b> 나머지 두 통은 봉인되어 있고, 쌓인 실험 점수 <b>5점</b>을 소모해 하나씩 해제한다. 소모한 점수는 돌아오지 않지만 평균 계산에는 그대로 남는다.</p>
+    <p class="lead">점수는 숫자가 아니라 <b>마지막 기도</b>로 매겨진다. 한 인생이 끝날 때 조건에 맞는 한 줄이 그 사람의 마지막 말이 되고, 그 별이 실험 점수에 더해진다. 별이 높은 순으로 적었다.</p>
+    <table class="rt">
+      <tr><th>별</th><th>마지막 기도</th><th>언제</th></tr>
+      <tr><td>★★★★★</td><td>"감사했습니다. 다 감사했습니다."</td><td>신앙 55 이상, 의존 2 이하, 자립 2 이상</td></tr>
+      <tr><td>★★★★★</td><td>"묻지 않아도 되었습니다. 그래서 감사했습니다."</td><td>조용한 길. 평생 본인 기도 3회 이하, 한 번도 들어주지 않음, 자립 1 이상, 신앙 45 이상</td></tr>
+      <tr><td>★★★★</td><td>"아무도 없다는 걸 압니다. 그래도."</td><td>신앙 30 미만이지만 자립 3 이상</td></tr>
+      <tr><td>★★★</td><td>"남은 사람들에게는 더 잘해주십시오."</td><td>다음 사람에게 축복을 남겼고(거절 뒤 스스로 해낸 적 있음) 신앙 40 이상, 의존 2 이하</td></tr>
+      <tr><td>★★</td><td>"거기 계셨습니까."</td><td>신앙 30 이상 60 미만</td></tr>
+      <tr><td>★★</td><td>"덕분에 살았습니다. 이제 돌려드립니다."</td><td>신앙 60 이상이지만 의존 3 이상 <span class="pri">우선</span></td></tr>
+      <tr><td>★★</td><td>"제 몫이 아닌 것을 받았습니다."</td><td>자기 기적으로 남에게서 10년 이상 가져갔고 개방성 또는 친화성 60 이상 <span class="pri">우선</span></td></tr>
+      <tr><td>★★</td><td>"..."</td><td>위 어느 것도 아님</td></tr>
+      <tr><td>★</td><td>"한 번만. 마지막으로 한 번만."</td><td>의존 4 이상이고 마지막 10년에도 들어준 적 있음 <span class="pri">우선</span></td></tr>
+      <tr><td>★</td><td>"왜 저였습니까."</td><td>남의 기적 대가로 10년 이상 잃었고 신앙 50 미만 <span class="pri">우선</span></td></tr>
+      <tr><td class="z">☆</td><td><i>(기도 없음)</i></td><td>신앙 30 미만으로 20년 넘게 기도하지 않음 · 또는 신앙 0 <span class="pri">우선</span></td></tr>
+    </table>
+    <p class="lead" style="margin-top:-6px"><span class="pri">우선</span> 표시가 붙은 조건은 더 높은 별의 조건을 함께 만족해도 먼저 적용된다. 예를 들어 신앙이 높아도 의존이 3을 넘으면 "덕분에 살았습니다"로 끝난다.</p>
+    <div class="cols2">
+      <div><b>의존</b> 들어줄 때마다 +1 (부모의 기도는 +0.5). 거절 뒤 스스로 해내면 −1. 10년마다 1씩 옅어짐. 높을수록 기도가 잦아지고 성실성이 깎인다.</div>
+      <div><b>자립</b> 거절하거나 침묵한 기도가 세상의 확률로 이루어진 횟수. 거절 뒤 해내면 성실성 +2, 개방성 +1.</div>
+      <div><b>신앙</b> 들어주면 오르지만 성실한 사람은 자기 공으로 돌려 거의 안 오른다. 거절 −8, 침묵 −12. 혼자 해냈을 때는 −3 / −6. 거절했는데 우연히 이루어지면 +10.</div>
+      <div><b>유산</b> 큰 기도(자녀 사고, 부모 병환, 사고, 마음의 병, 데뷔, 사별)를 들어주면 <span style="color:var(--cost)">불운 1</span>이, 거절 뒤 스스로 해내면 <span style="color:var(--bone)">축복 0.5</span>가 이 통에 남아 다음 사람의 가정환경(안정·재산·온기·자극)이 그만큼 내려가거나 올라간다. 한 단위가 성격 한 축을 5~6점, 세 단위면 표준편차 하나 가까이 움직인다. 자녀 사고와 부모 병환은 다른 통의 수명도 깎는다. 최근 20년에 4회 들어줄 때마다 응답 기한이 1년 짧아진다.</div>
+    </div>
+    <p class="lead" style="margin-bottom:0">요약하면, <b>다 들어주면</b> 의존이 쌓여 별 하나로 끝나고, <b>다 거절하면</b> 신앙이 바닥나 기도가 끊긴다. 기도가 많은 사람은 스스로 해낼 수 있는 기도를 골라 거절하는 <b>고르는 게임</b>, 기도가 드문 사람은 그 한두 번을 전부 참아내는 <b>참는 게임</b>이 다섯 별로 가는 길이다.</p>
+  </div>
+</div>
+
+<script src="genetics.js"></script>
+<script src="events.js"></script>
+<script src="sim.js"></script>
+<script>
+const TR = ["E", "C", "O", "A", "N", "iq", "app"];
+const SHORT = { E: "외향", C: "성실", O: "개방", A: "친화", N: "신경", iq: "지능", app: "외모" };
+
+function run(n) {
+  for (let i = 0; i < n; i++) {
+    tickAll();
+  }
+  render();
+}
+function ans(id, kind) { const pr = PRAYERS.find(p => p.id === id); if (pr) answer(pr, kind); render(); }
+function resetVat(slot) { replaceVat(VATS[slot]); render(); }
+
+// ---------- 봉인된 통: 실험 점수를 소모해 해제 ----------
+const MAX_VATS = 3, UNLOCK_COST = 5;
+let SPENT = 0;                                   // 해제에 쓴 점수 누계
+const balance = () => SCORE - SPENT;             // 지금 쓸 수 있는 점수
+function unlockVat() {
+  if (VATS.length >= MAX_VATS || balance() < UNLOCK_COST) return;
+  SPENT += UNLOCK_COST;
+  const v = newVat(VATS.length);
+  VATS.push(v);
+  v.html.unshift(`<div class="cost">실험 기록: 실험 점수 ${UNLOCK_COST}점을 소모해 이 통의 봉인을 풀었다. (실험 ${OPT.year}년차)</div>`);
+  fx("grant", v.slot, 2);                        // 빛기둥으로 새 통이 켜진다
+  render();
+}
+function lockedHtml(slot) {
+  const ok = balance() >= UNLOCK_COST, b = balance();
+  return `<div class="col locked">
+    <div class="lockhead"><div class="nm">봉인된 통 ${slot + 1}</div><div class="kv"><span>전원 꺼짐</span></div></div>
+    <div class="tankwrap"><div class="tank locked" id="tank-${slot}"></div></div>
+    <div class="lockbox">
+      <div>이 통에는 아직 아무도 없다.</div>
+      <div class="cost ${ok ? "" : "short"}">★ ${UNLOCK_COST}</div>
+      <button class="g" ${ok ? "" : "disabled"} onclick="unlockVat()">${ok ? `실험 점수 ${UNLOCK_COST}점으로 해제` : `실험 점수 ${UNLOCK_COST}점 필요 (현재 ${b})`}</button>
+      <div class="tip">${ok ? "해제하면 새 부모에게서 0세 아이가 이 통에서 배양되기 시작한다." : "한 인생이 끝날 때 마지막 기도의 별이 실험 점수로 쌓인다. 별을 모아 이 통을 깨워라."}</div>
+    </div>
+  </div>`;
+}
+const FAM = {};
+function toggleFam(slot) { FAM[slot] = !FAM[slot]; render(); }
+
+// 유산 배지: 방향(물려받음 ⟵ / 다음 사람에게 ⟶) + 종류(축복 ✦ / 불운 ✖) + 크기
+function legacyBadge(n, dir) {
+  if (!n) return "";
+  const good = n > 0, amt = Math.abs(n);
+  const kind = good ? "축복" : "불운";
+  const tip = dir === "in"
+    ? `전 사람이 이 통에 남긴 ${kind} ${amt}. ${good ? "안정·재산·온기·자극이 그만큼 높은 집에서 태어났다" : "안정·재산·온기·자극이 그만큼 낮은 집에서 태어났다"}`
+    : `이 사람이 다음 사람에게 남길 ${kind} ${amt}. 불운은 큰 기도를 들어줄 때, 축복은 거절 뒤 스스로 해낼 때 쌓인다`;
+  return `<span class="badge ${good ? "good" : "bad"} ${dir}" data-tip="${tip}"><i class="dir">${dir === "in" ? "<" : ">"}</i><i class="kind">${good ? "✦" : "✖"}</i><b>${amt}</b></span>`;
+}
+
+// 죽은 뒤 회고: 마지막 기도, 왜 그 별인지, 더 높은 결말에 모자란 것, 이 인생의 기도 응답
+function retroHtml(v) {
+  const P = v.P, J = P.lastPrayer; if (!J) return "";
+  const X = explainLastPrayer(P, J);
+  const stars = J.stars ? "★".repeat(J.stars) : "☆";
+  const prayers = PRAYERS.filter(p => p.v === v && p.status !== "last");
+  const lab = { grant: "들어줌", deny: "거절", silence: "침묵", expired: "응답 전 사망", open: "대기" };
+  const plist = prayers.length ? prayers.map(p => `<div class="rp"><span class="y">${p.askedAt}세</span><span class="st-${p.status}">${lab[p.status]}</span> <i>${p.text}</i></div>`).join("") : `<div class="num">이 사람은 한 번도 기도하지 않았다.</div>`;
+  const five = X.miss.find(m => m.stars === 5);
+  const toFive = J.stars === 5 ? "" : `<div class="need">다섯 별까지 모자란 것: ${five && five.need.length ? five.need.join(" · ") : "조건은 맞았지만 더 앞선 규칙에 먼저 걸렸다"}</div>`;
+  const chips = X.factors.map(([k, val]) => `<span class="chip"><span>${k}</span><b>${val}</b></span>`).join("");
+  return `<div class="retro">
+    <div class="rt">${P.name}, ${P.age}세. ${P.deathWhy}</div>
+    <div class="rl">${J.text ? `🙏 "${J.text}"` : "마지막 순간, 기도는 없었다."} <span class="rs">${stars}</span></div>
+    <div class="rw">${X.why}</div>
+    ${toFive}
+    <div class="chips">${chips}</div>
+    <div class="rh">이 인생의 기도 ${prayers.length}회</div><div class="rpl">${plist}</div>
+    <button class="g" onclick="resetVat(${v.slot})">다음 사람 배양 개시</button>
+  </div>`;
+}
+
+function pastHtml(v) {
+  const past = GRAVE.filter(g => g.slot === v.slot);
+  if (!past.length) return `<div class="past"><span class="z">이 통의 첫 인생</span></div>`;
+  const stars = past.slice(-5).map(g => g.stars ? `<b>${"★".repeat(g.stars)}</b>` : `<span class="z">☆</span>`).join(" ");
+  const l = past[past.length - 1];
+  return `<div class="past">이 통의 지난 인생 ${past.length}명 · ${stars}<br><span class="last">${l.name} ${l.age}세: "${l.last || "마지막 기도 없음"}"</span></div>`;
+}
+
+function colHtml(v) {
+  const P = v.P;
+  const traits = TR.map(k => `<div class="tr"><div class="bars"><i class="b" style="height:${Math.max(2, P.born[k] * 0.34)}px"></i><i class="p" style="height:${Math.max(2, P.pheno[k] * 0.34)}px"></i></div><div class="v">${Math.round(P.pheno[k])}</div>${SHORT[k]}</div>`).join("");
+  const fam = [P.motherAlive ? "모" : "", P.fatherAlive ? "부" : "", P.spouse ? "배우자" : P.dating ? "연인" : "", P.child ? "자녀" : ""].filter(Boolean).join(" ") || "—";
+  const head = `<div class="head ${v.dead ? "dead" : ""}">
+    <div class="nm">${P.name}<span class="num">${P.age}세${v.dead ? " · 사망" : ""}</span><span style="float:right"><button class="sm" onclick="toggleFam(${v.slot})">${FAM[v.slot] ? "가정환경 닫기" : "가정환경"}</button><button class="sm" title="이 통을 비우고 새 인생을 0세부터 배양" onclick="resetVat(${v.slot})">${v.dead ? "재배양" : "폐기"}</button></span></div>
+    <div class="kv"><span>신앙 <b>${Math.round(P.faith)}</b></span><span>건강 <b>${Math.round(P.health)}</b></span><span>재산 <b>${Math.round(P.wealth)}</b></span><span>가족 <b>${fam}</b></span><span>기도 <b>${P.counts.pray}</b></span><span class="tipb" data-tip="의존. 기도를 들어줄 때마다 +1 (부모의 기도는 +0.5), 거절 뒤 스스로 해내면 −1. 10년마다 1씩 옅어진다. 높을수록 기도가 잦아지고 성실성이 깎인다.">의존 <b>${P.dep.toFixed(1)}</b></span><span class="tipb" data-tip="자립. 거절하거나 침묵한 기도가 세상의 확률로 이루어진 횟수. 다섯 별 결말에 2 이상 필요하다.">자립 <b>${P.self}</b></span>${P.debt ? `<span style="color:var(--cost)">빚 ${P.debt}년</span>` : ""}${legacyBadge(P.inheritedDebt, "in")}${legacyBadge(VAT_DEBT[v.slot], "out")}</div>
+</div>`;
+  const famPanel = famHtml(v);
+  const slot = `<div class="slot">${v.open.length ? v.open.map(pr => {
+    const left = effectiveWindow() - (P.age - pr.askedAt);
+    return `<div class="pr"><div class="who">${pr.askedAt}세${pr.byParent ? " · 부모의 기도" : ""}</div><div class="q">${pr.text}</div>
+      <div class="left">${left > 0 ? `${left}년 뒤 침묵 처리` : "올해 침묵 처리"}</div>
+      <div class="btns"><button class="g" onclick="ans(${pr.id},'grant')">들어준다</button><button class="d" onclick="ans(${pr.id},'deny')">거절</button><button class="s" onclick="ans(${pr.id},'silence')">침묵</button></div></div>`;
+  }).join("") : `<div class="empty">기도 없음</div>`}</div>`;
+  const panel = v.dead ? retroHtml(v) : slot;
+  const tankState = v.dead ? "dead" : v.open.length ? "praying" : "normal";
+  const st = FXS[v.slot] || {}, now = performance.now();
+  const extra = (now < (st.stillUntil || 0) ? " still" : "") + (now < (st.shakeUntil || 0) ? ` shake${st.shakeK || 1}` : "") + (now < (st.dimUntil || 0) ? " dimfx" : "");
+  const tank = `<div class="tankwrap" onclick="tapTank(${v.slot}, event)" title="유리를 두드린다"><div class="tank ${tankState}${extra}" id="tank-${v.slot}"></div></div>`;
+  return `<div class="col">${head}${tank}<div class="traits">${traits}</div>${pastHtml(v)}${famPanel}${panel}${v.dead ? "" : `<div class="tl" id="tl-${v.slot}">${v.html.join("")}</div>`}</div>`;
+}
+
+function famHtml(v) {
+  const P = v.P, h = P.home;
+  const keys = [["face", "얼굴"], ["height", "키"], ["build", "체격"], ["iq", "지능"], ["E", "외향"], ["C", "성실"], ["O", "개방"], ["A", "친화"], ["N", "신경"]];
+  const person = (p, role) => `<div><h4>${role} · ${p.name} (출산 시 ${p.age}세)</h4>${keys.map(([k, l]) => `<div class="row"><span>${l}</span><span><i style="width:${p.geno[k] * 0.5}px"></i><b>${p.geno[k]}</b></span></div>`).join("")}
+    <div class="row"><span>재산</span><b>${p.wealth}</b></div><div class="row"><span>학력</span><b>${p.edu}</b></div></div>`;
+  const envs = [["warmth", "온기", "친화성↑ 신경성↓ 외향성↑"], ["structure", "규율", "성실성↑"], ["stimulus", "자극", "지능↑ 개방성↑"], ["wealth", "재산", "외모·안정"], ["stability", "안정", "신경성↓ 전반"]];
+  return `<div class="fam ${FAM[v.slot] ? "on" : ""}"><div class="pp">${person(P.m, "어머니")}${person(P.f, "아버지")}</div>
+    <h4>가정환경 (부모 특성에서 유도, 아이의 환경 몫을 결정)</h4>
+    <div class="env">${envs.map(([k, l, d]) => `<div title="${d}"><div class="v">${Math.round(h[k])}</div>${l}</div>`).join("")}</div>
+    <div class="row" style="margin-top:6px"><span>아이 유전형 (부모 평균 + 분리 분산)</span><span>${keys.map(([k, l]) => `${l} <b>${P.geno[k]}</b>${P.mut[k] ? "<span style='color:var(--bad)'>*</span>" : ""}`).join(" · ")}</span></div>
+    ${Object.keys(P.mut).length ? `<div class="row"><span style="color:var(--bad)">* 돌연변이: 부모 평균에서 크게 벗어난 특성</span></div>` : ""}</div>`;
+}
+
+// ---------- 연출 ----------
+// sim.js가 FX 큐에 넣은 사건을 화면 효과로 바꾼다. 상태 클래스는 FXS에 두어 render()가 다시 그려도 유지된다.
+const FXS = {};            // slot → { stillUntil, shakeUntil, shakeK, dimUntil }
+const PARTS = [];          // 캔버스 입자 (기포·빛기둥·파문)
+let fxLoop = null;
+const fxCanvas = document.getElementById("fxc"), fxCtx = fxCanvas.getContext("2d");
+function fxResize() { fxCanvas.width = innerWidth; fxCanvas.height = innerHeight; }
+addEventListener("resize", fxResize); fxResize();
+
+function tankRect(slot) {
+  const el = document.getElementById(`tank-${slot}`); if (!el) return null;
+  const r = el.getBoundingClientRect();
+  // 스프라이트 안의 액체 영역 (256x208 표시 기준). 128px 원본의 (30,40)-(98,96) × 2, 세로 오프셋 -24
+  return { x: r.left, y: r.top, w: r.width, h: r.height, lx: r.left + 60, ly: r.top + 56, lw: 136, lh: 112 };
+}
+function setState(slot, key, ms, extra) {
+  const st = FXS[slot] = FXS[slot] || {}; st[key] = performance.now() + ms; Object.assign(st, extra || {});
+  const el = document.getElementById(`tank-${slot}`); if (!el) return;
+  const cls = { stillUntil: "still", shakeUntil: `shake${st.shakeK || 1}`, dimUntil: "dimfx" }[key];
+  el.classList.remove("shake1", "shake2"); el.classList.add(cls);
+  setTimeout(() => { const e = document.getElementById(`tank-${slot}`); if (e && performance.now() >= st[key] - 5) e.classList.remove(cls); }, ms);
+}
+function addParts(list) { PARTS.push(...list); if (!fxLoop) fxLoop = requestAnimationFrame(fxStep); }
+function bone(a) { return `rgba(239,227,221,${Math.max(0, Math.min(1, a)).toFixed(2)})`; }
+
+function playFX() {
+  while (FX.length) {
+    const f = FX.shift(); const R = tankRect(f.slot); if (!R) continue;
+    if (f.t === "grant") {
+      // 빛기둥: 열 위에서 뇌까지. 디더링 세로줄
+      addParts([{ k: "beam", x: R.lx + R.lw / 2, y0: R.y - 120, y1: R.ly + R.lh / 2, w: 26 + 10 * f.k, t: 0, T: 80 }]);
+      // 기포 폭발
+      const n = 18 + 14 * f.k, b = [];
+      for (let i = 0; i < n; i++) b.push({ k: "bub", x: R.lx + 8 + Math.random() * (R.lw - 16), y: R.ly + R.lh - 6 - Math.random() * 20, vy: -(1 + Math.random() * 2.2), vx: (Math.random() - .5) * .6, t: 0, T: 40 + Math.random() * 50, top: R.ly + 4, s: Math.random() < .3 ? 4 : 2 });
+      addParts(b);
+    } else if (f.t === "deny") {
+      setState(f.slot, "dimUntil", 450);
+    } else if (f.t === "cost") {
+      setState(f.slot, "shakeUntil", 1500, { shakeK: f.k >= 2 ? 2 : 1 });
+      // 액체가 한 톤 가라앉는다: 어두운 막이 잠깐 덮였다 걷힘
+      addParts([{ k: "veil", x: R.lx, y: R.ly, w: R.lw, h: R.lh, t: 0, T: 70, a: .55 }]);
+    } else if (f.t === "bad") {
+      setState(f.slot, "shakeUntil", f.k >= 2 ? 2400 : 1500, { shakeK: f.k >= 2 ? 2 : 1 });
+      if (f.k >= 2) setState(f.slot, "stillUntil", 3200);
+    } else if (f.t === "death") {
+      setState(f.slot, "stillUntil", 6000);
+      addParts([{ k: "veil", x: R.lx, y: R.ly, w: R.lw, h: R.lh, t: 0, T: 160, a: .7 }]);
+    } else if (f.t === "tap") {
+      const el = document.getElementById(`tank-${f.slot}`); if (el) { el.classList.remove("twitch"); void el.offsetWidth; el.classList.add("twitch"); setTimeout(() => el.classList.remove("twitch"), 300); }
+      const b = []; for (let i = 0; i < 4; i++) b.push({ k: "bub", x: R.lx + 20 + Math.random() * (R.lw - 40), y: R.ly + R.lh * .5 + Math.random() * 30, vy: -(1.2 + Math.random()), vx: 0, t: 0, T: 30, top: R.ly + 4, s: 2 });
+      addParts(b);
+    }
+  }
+}
+function tapTank(slot, ev) {
+  const v = VATS[slot]; if (!v) return;
+  tapVat(v);
+  // 유리 두드림 파문: 클릭 지점에서 동심원
+  addParts([{ k: "ring", x: ev.clientX, y: ev.clientY, t: 0, T: 28 }, { k: "ring", x: ev.clientX, y: ev.clientY, t: -8, T: 28 }, { k: "ring", x: ev.clientX, y: ev.clientY, t: -16, T: 28 }]);
+  playFX();
+  // 로그만 갱신 (타임라인에 줄이 생겼을 수 있음)
+  const tl = document.getElementById(`tl-${slot}`); if (tl) { const atBottom = tl.scrollHeight - tl.scrollTop - tl.clientHeight < 40; tl.innerHTML = v.html.join(""); if (atBottom) tl.scrollTop = tl.scrollHeight; }
+}
+function fxStep() {
+  const ctx = fxCtx; ctx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+  for (let i = PARTS.length - 1; i >= 0; i--) {
+    const p = PARTS[i]; p.t++;
+    if (p.t < 0) continue;
+    const u = p.t / p.T;
+    if (p.k === "bub") {
+      p.x += p.vx; p.y += p.vy;
+      if (p.y < p.top || p.t >= p.T) { PARTS.splice(i, 1); continue; }
+      ctx.fillStyle = bone(1 - u * .6); ctx.fillRect(Math.round(p.x / 2) * 2, Math.round(p.y / 2) * 2, p.s, p.s);
+    } else if (p.k === "beam") {
+      if (p.t >= p.T) { PARTS.splice(i, 1); continue; }
+      const a = u < .25 ? u / .25 : 1 - (u - .25) / .75;
+      const top = p.y0, bottom = p.y1, x0 = Math.round(p.x - p.w / 2);
+      for (let x = x0; x < x0 + p.w; x += 2) {
+        const edge = 1 - Math.abs((x - p.x) / (p.w / 2));
+        for (let y = Math.round(top / 2) * 2; y < bottom; y += 4) {
+          if (((x + y + p.t * 2) / 2) % 3 === 0) continue;     // 디더링
+          ctx.fillStyle = bone(.4 * a * edge * (1 - (y - top) / (bottom - top) * .4)); ctx.fillRect(x, y, 2, 2);
+        }
+      }
+    } else if (p.k === "veil") {
+      if (p.t >= p.T) { PARTS.splice(i, 1); continue; }
+      const a = u < .2 ? u / .2 : 1 - (u - .2) / .8;
+      ctx.fillStyle = `rgba(11,10,9,${(p.a * a).toFixed(2)})`; ctx.fillRect(p.x, p.y, p.w, p.h);
+    } else if (p.k === "ring") {
+      if (p.t >= p.T) { PARTS.splice(i, 1); continue; }
+      const r = 4 + u * 26; ctx.strokeStyle = bone(.9 * (1 - u)); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 6.283); ctx.stroke();
+    }
+  }
+  fxLoop = PARTS.length ? requestAnimationFrame(fxStep) : null;
+}
+
+// ---------- 관측 일지: 지금까지 키운 인물 목록. 눌러서 펼치면 스탯과 기도 목록 ----------
+const ARCH_OPEN = new Set();
+function toggleArch(key) { if (ARCH_OPEN.has(key)) ARCH_OPEN.delete(key); else ARCH_OPEN.add(key); document.getElementById("arch").innerHTML = archHtml(); }
+function archHtml() {
+  const label = { open: "대기", grant: "들어줌", deny: "거절", silence: "침묵", expired: "응답 전 사망", last: "마지막 기도" };
+  const starStr = n => n ? "★".repeat(n) : `<span class="z">☆</span>`;
+  // 살아 있는 사람(위) + 끝난 인생(최신이 위)
+  const living = VATS.filter(v => !v.dead).map(v => ({ key: `v${v.id}`, P: v.P, slot: v.slot, alive: true }));
+  const gone = [...GRAVE].reverse().map(g => ({ key: `g${g.id}`, P: g.P, slot: g.slot, g }));
+  const all = [...living, ...gone].filter(x => x.P);
+  if (!all.length) return `<div class="empty">아직 관측된 인물이 없다</div>`;
+  const row = ({ key, P, slot, alive, g }) => {
+    const on = ARCH_OPEN.has(key);
+    const J = P.lastPrayer;
+    const life = alive ? `<span class="life alive">배양 중 · ${P.age}세</span>`
+               : g.reset ? `<span class="life">${P.age}세 · 폐기</span>`
+               : `<span class="life">${P.age}세 · ${P.deathWhy || "사망"}</span>`;
+    const stars = alive || g.reset ? `<span class="stars"><span class="z">—</span></span>` : `<span class="stars">${starStr(J ? J.stars : 0)}</span>`;
+    const lp = alive ? `<span class="lp none">아직 살아 있다</span>`
+             : g.reset ? `<span class="lp none">응답을 받기 전에 통이 비워졌다</span>`
+             : J && J.text ? `<span class="lp">"${J.text}"</span>` : `<span class="lp none">마지막 기도 없음</span>`;
+    const sum = `<div class="sum" onclick="toggleArch('${key}')"><span class="tri">${on ? "▼" : "▶"}</span><span class="nm">${P.name}<span class="num">통 ${slot + 1}</span></span>${life}${stars}${lp}</div>`;
+    if (!on) return `<div class="pe">${sum}</div>`;
+    // ---- 펼친 내용 ----
+    const c = P.counts;
+    const prayers = PRAYERS.filter(pr => pr.v.P === P);
+    const tr = TR.map(k => { const a = Math.round(P.born[k]), b = Math.round(P.pheno[k]); const d = b - a; return `<span>${SHORT[k]} <b>${a}→${b}</b>${d ? ` <i class="${d > 0 ? "up" : "dn"}">${d > 0 ? "+" : ""}${d}</i>` : ""}</span>`; }).join("");
+    const kv = [["신앙", Math.round(P.faith)], ["의존", P.dep.toFixed(1)], ["자립", P.self], ["건강", Math.round(P.health)], ["재산", Math.round(P.wealth)],
+      ["사건", `${c.ev}건`], ["기도", `${c.pray}회`], ["들어줌", c.grant], ["거절", c.deny], ["침묵", c.silence],
+      ["남에게서 가져온 수명", `${P.taken}년`], ["남의 기적 대가로 잃은 수명", `${P.debt}년`],
+      ...(P.inheritedDebt ? [["물려받은 유산", legacyLabel(P.inheritedDebt)]] : []), ...(VAT_DEBT[slot] && alive ? [["다음 사람에게", legacyLabel(VAT_DEBT[slot])]] : [])]
+      .map(([k, val]) => `<span>${k} <b>${val}</b></span>`).join("");
+    let verdict = "";
+    if (J) { const X = explainLastPrayer(P, J); verdict = `<div class="why">${J.text ? `🙏 "${J.text}" <b>${starStr(J.stars)}</b>` : `마지막 순간, 기도는 없었다. ${starStr(0)}`}</div><div class="why num">${X.why}</div>`; }
+    const plist = prayers.length ? prayers.map(pr => `<div class="rp"><span class="y">${pr.askedAt}세</span><span class="st-${pr.status}">${label[pr.status]}${pr.late ? ` +${pr.late}년` : ""}${pr.byParent ? " · 부모" : ""}</span><i>${pr.text}</i>${pr.result && pr.status !== "last" ? `<span class="res">${pr.result}${pr.faithDelta ? ` · 신앙 ${pr.faithDelta > 0 ? "+" : ""}${pr.faithDelta}` : ""}</span>` : ""}</div>`).join("")
+      : `<div class="num">이 사람은 한 번도 기도하지 않았다.</div>`;
+    const ledger = P.ledger.length ? `<h5>실험 기록</h5><div class="ledger">${P.ledger.join("<br>")}</div>` : "";
+    const det = `<div class="det">
+      <div>${verdict ? `<h5>마지막 기도</h5>${verdict}` : ""}<h5>특성 (출생 → ${alive ? "현재" : "마지막"})</h5><div class="tl7">${tr}</div><h5>수치</h5><div class="kv2">${kv}</div>${ledger}</div>
+      <div><h5>기도 ${prayers.length}회</h5>${plist}</div>
+    </div>`;
+    return `<div class="pe on">${sum}${det}</div>`;
+  };
+  const head = `<div class="ah"><b>관측 일지</b><span>인물 ${all.length}명 · 끝난 인생 ${GRAVE.length}명 · 누적 ★ ${SCORE}</span><span>이름을 누르면 펼쳐진다</span></div>`;
+  return head + all.map(row).join("");
+}
+
+function render() {
+  const scroll = VATS.map(v => { const el = document.getElementById(`tl-${v.slot}`); return el ? el.scrollHeight - el.scrollTop - el.clientHeight < 40 || el.scrollTop === 0 : true; });
+  const locked = []; for (let i = VATS.length; i < MAX_VATS; i++) locked.push(lockedHtml(i));
+  document.getElementById("cols").innerHTML = VATS.map(colHtml).join("") + locked.join("");
+  VATS.forEach((v, i) => { const el = document.getElementById(`tl-${v.slot}`); if (el && scroll[i]) el.scrollTop = el.scrollHeight; });
+  document.getElementById("arch").innerHTML = archHtml();
+  const nOpen = PRAYERS.filter(p => p.status === "open").length;
+  document.getElementById("stepYear").textContent = `실험 ${OPT.year + 1}년차`;
+  playFX();
+  const ew = effectiveWindow(), rg = recentGrants();
+  const starStr = g => g.stars ? "★".repeat(g.stars) : `<span class="z">☆</span>`;
+  document.getElementById("scoreNum").textContent = balance();
+  document.getElementById("scoreSpent").textContent = SPENT ? `(해제에 ${SPENT} 사용 · 누적 ${SCORE})` : "";
+  document.getElementById("scoreHist").innerHTML = GRAVE.length ? GRAVE.slice(-6).map(g => `<span title="${g.name} ${g.age}세 · ${g.last || "기도 없음"}">${starStr(g)}</span>`).join(" · ") : "—";
+  saveGame();
+  document.getElementById("status").innerHTML = `<span class="num">${GRAVE.length}명 평균 ${GRAVE.length ? (SCORE / GRAVE.length).toFixed(1) : "—"}</span> &nbsp; 응답 기한 <b style="color:${ew < OPT.prayerWindow ? "var(--bad)" : "var(--fg)"}">${ew}년</b> <span class="num">(최근 20년 개입 ${rg}회)</span> &nbsp; 대기 ${nOpen}`;
+}
+
+
+// ---------- 튜토리얼 툴팁: 인트로가 걷힌 뒤 세 단계로 화면을 가리킨다 ----------
+const TOUR_ALWAYS = false;   // 프로토타입 동안은 매번. 본 게임에서는 false로 두면 첫 실행에만
+const TOUR = [
+  { sel: () => [document.querySelector("#cols .col .head"), document.querySelector("#cols .col .traits")],
+    title: "이 사람이 가진 것",
+    text: "위의 수치와 막대는 이 사람의 성격, 지능, 외모다. 회색은 타고난 값, 밝은 쪽은 지금 값. <b>가정환경</b> 버튼을 누르면 부모의 유전자와 자란 집이 보인다.<br><br>이 변수들에 따라 삶에서 일어나는 일이 달라진다. 외향적이면 사람이 모이고, 신경이 예민하면 자주 기도한다. 신은 이 값을 바꿀 수 없다. 다만 알고 있을 뿐이다.", pos: "right" },
+  { sel: () => [document.getElementById("score")],
+    title: "실험 점수",
+    text: "한 인생이 끝날 때 그 사람이 남기는 <b>마지막 기도</b>가 별이 되어 쌓인다. 어떤 말이 몇 개의 별인지는 이 배지를 누르면 볼 수 있다.<br><br>다 들어준다고 별이 오르지 않는다. 다 거절해도 마찬가지다.", pos: "below" },
+  { sel: () => [document.getElementById("step")],
+    title: "시간을 넘긴다",
+    text: "이 버튼을 누르거나 <b>스페이스바</b>를 치면 한 해가 지난다. 기도가 올라오면 통 아래 칸에 나타난다. 들어주거나, 거절하거나, 모른 척하거나.<br><br>이제 전원이 들어왔다. 첫 해를 넘겨 보라.", pos: "above", last: true },
+];
+let tourStep = -1;
+function tourStart(force) {
+  if (!force && !TOUR_ALWAYS && localStorage.getItem("brainvat_tour_seen")) return;
+  tourStep = 0; document.getElementById("tour").classList.add("on"); tourShow();
+  window.addEventListener("resize", tourShow);
+}
+function tourShow() {
+  const t = TOUR[tourStep]; if (!t) return;
+  const els = t.sel().filter(Boolean); if (!els.length) { tourNext(); return; }
+  // 가리킬 영역 = 대상들의 합집합
+  const rs = els.map(e => e.getBoundingClientRect());
+  const x1 = Math.min(...rs.map(r => r.left)) - 6, y1 = Math.min(...rs.map(r => r.top)) - 6;
+  const x2 = Math.max(...rs.map(r => r.right)) + 6, y2 = Math.max(...rs.map(r => r.bottom)) + 6;
+  const hl = document.getElementById("tourHl");
+  Object.assign(hl.style, { left: x1 + "px", top: y1 + "px", width: (x2 - x1) + "px", height: (y2 - y1) + "px" });
+  const box = document.getElementById("tourBox");
+  box.innerHTML = `<div class="tt">${t.title}</div><div class="tx">${t.text}</div>
+    <div class="tb"><span class="num">${tourStep + 1} / ${TOUR.length}</span><span><button class="sm" onclick="tourEnd()">그만 보기</button><button class="g" onclick="tourNext()">${t.last ? "시작" : "다음"}</button></span></div>`;
+  box.className = "pos-" + t.pos;
+  const W = box.offsetWidth, H = box.offsetHeight, vw = innerWidth, vh = innerHeight;
+  let left, top;
+  if (t.pos === "right") { left = x2 + 18; top = y1; }
+  else if (t.pos === "below") { left = (x1 + x2) / 2 - W / 2; top = y2 + 18; }
+  else { left = (x1 + x2) / 2 - W / 2; top = y1 - 18 - H; }
+  left = Math.max(12, Math.min(vw - W - 12, left)); top = Math.max(12, Math.min(vh - H - 12, top));
+  Object.assign(box.style, { left: left + "px", top: top + "px" });
+}
+function tourNext() { tourStep++; if (tourStep >= TOUR.length) tourEnd(); else tourShow(); }
+function tourEnd() {
+  tourStep = -1; document.getElementById("tour").classList.remove("on");
+  window.removeEventListener("resize", tourShow);
+  localStorage.setItem("brainvat_tour_seen", String(Date.now()));
+}
+
+// ---------- 인트로 (design/intro.md 안 1) ----------
+const INTRO = [
+  { img: "intro_1", lines: ["실험 기록 0일차.", "", "신은 전능하지 않다. 신은 다만, 기도를 듣는 자리에 있을 뿐이다.", "그 자리가 비어 있다는 것을 나는 오래전에 확인했다."] },
+  { img: "intro_2", imgAt: 1, lines: ["그래서 통을 만들었다. 우선은 하나.", "안에는 뇌가 있고, 뇌는 자기가 살아 있다고 믿는다.", "태어나고, 사랑하고, 실패하고, 가끔 하늘을 올려다본다.", "그들이 올려다보는 곳에 내가 있다."] },
+  { img: null, lines: ["이것은 신이 되는 실험이다.", "들어줄 것인가, 거절할 것인가, 침묵할 것인가.", "세 가지 응답으로 한 인생을 끝까지 지켜본다. 결과가 쌓이면 통을 늘린다.", "마지막 순간 그들이 무어라 말하는지, 그것이 결과다."] },
+  { img: null, lines: ["주의할 것.", "기적에는 값이 있다. 그 값은 내가 아니라 그들이 치른다.", "그리고 응답하지 않은 기도는 사라지지 않는다. 쌓인다."] },
+  { img: "tanks", lines: ["전원을 넣는다."] },
+];
+let ip = 0, il = 0, typing = null, introDone = false;
+const $ = id => document.getElementById(id);
+
+// 프로토타입 동안은 매번 전체 인트로를 보여준다. 본 게임에서는 false로 두면 두 번째부터 "N일차" 한 줄만 나온다.
+const INTRO_ALWAYS = false;
+function introStart(force) {
+  const seen = localStorage.getItem("brainvat_intro_seen");
+  if (seen && !force && !INTRO_ALWAYS) { introBrief(); return; }
+  ip = 0; il = 0; introDone = false;
+  $("intro").classList.add("on"); $("intro").classList.remove("fade");
+  $("introTxt").innerHTML = ""; $("introTanks").style.display = "none"; $("introPic").style.display = "";
+  showPara();
+}
+function showPara() {
+  const para = INTRO[ip];
+  $("introTxt").innerHTML = "";
+  const pic = $("introPic");
+  pic.classList.remove("show");
+  if (para.img === "tanks") {
+    pic.style.display = "none"; $("introTanks").style.display = "flex";
+    $("introTanks").innerHTML = [0, 1, 2].map(i => `<div class="tank ${i === 0 ? "normal" : "locked"}"></div>`).join("");
+  } else if (para.img && !para.imgAt) {
+    showPic(para.img);
+  } else { dustRun(false); flickerRun(false); tearRun(false); }
+  il = 0; typeLine();
+}
+function showPic(name) {
+  const pic = $("introPic");
+  setTimeout(() => { $("introImg").src = `sprites/${name}.png`; pic.classList.add("show"); }, 50);
+  dustRun(name === "intro_1");
+  flickerRun(name === "intro_2");
+  tearRun(name === "intro_2");
+}
+function typeLine() {
+  const para = INTRO[ip], line = para.lines[il];
+  if (para.imgAt && il === para.imgAt) showPic(para.img);   // 지정한 줄에서 그림 등장
+  const el = document.createElement("div"); el.className = "cur"; $("introTxt").appendChild(el);
+  let i = 0;
+  typing = setInterval(() => {
+    el.textContent = line.slice(0, ++i);
+    if (i >= line.length) { clearInterval(typing); typing = null; el.classList.remove("cur"); if (il === para.lines.length - 1) el.classList.add("cur"); if (line === "전원을 넣는다.") powerOn(); }
+  }, line ? 38 : 1);
+}
+function introClick() {
+  if (introDone) return;
+  const para = INTRO[ip];
+  if (typing) { clearInterval(typing); typing = null; const d = $("introTxt").lastChild; d.textContent = para.lines[il]; d.classList.remove("cur"); if (il === para.lines.length - 1) d.classList.add("cur"); if (para.lines[il] === "전원을 넣는다.") powerOn(); return; }
+  if (il < para.lines.length - 1) { $("introTxt").lastChild.classList.remove("cur"); il++; typeLine(); return; }
+  if (ip < INTRO.length - 1) { ip++; showPara(); }
+}
+function powerOn() {
+  introDone = true;
+  const tanks = [...$("introTanks").children];
+  setTimeout(() => tanks[0].classList.add("lit"), 500);   // 첫 통만 켜진다. 나머지는 봉인된 채
+  setTimeout(introEnd, 500 + 550 + 900);
+}
+function introEnd() {
+  if (typing) { clearInterval(typing); typing = null; }
+  introDone = true; dustRun(false); flickerRun(false); tearRun(false);
+  localStorage.setItem("brainvat_intro_seen", String(Date.now()));
+  if (!localStorage.getItem("brainvat_first_run")) localStorage.setItem("brainvat_first_run", String(Date.now()));
+  $("intro").classList.add("fade");
+  setTimeout(() => { $("intro").classList.remove("on", "fade"); tourStart(false); }, 1500);
+}
+// 재실행: "실험 기록 N일차." 한 줄만
+function introBrief(text) {
+  const first = +localStorage.getItem("brainvat_first_run") || Date.now();
+  const day = Math.floor((Date.now() - first) / 86400000);
+  if (!text) text = `실험 기록 ${day}일차.`;
+  $("intro").classList.add("on"); $("intro").classList.remove("fade");
+  $("introPic").style.display = "none"; $("introTanks").style.display = "none";
+  $("introTxt").innerHTML = `<div class="day">${text}</div>`;
+  introDone = true;
+  setTimeout(() => { $("intro").classList.add("fade"); setTimeout(() => { $("intro").classList.remove("on", "fade"); $("introPic").style.display = ""; }, 1500); }, 1600);
+}
+
+// ---------- 먼지: 첫 그림 위에 떠다니는 뼈색 픽셀 ----------
+let dustTimer = null;
+function dustRun(on) {
+  const cv = $("dust"), ctx = cv.getContext("2d");
+  if (dustTimer) { cancelAnimationFrame(dustTimer); dustTimer = null; }
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (!on) return;
+  // 빛기둥(화면 중앙 위)에 몰리도록 x는 중앙 편향, y는 전체
+  const N = 46, P = [];
+  const g = () => (Math.random() + Math.random() + Math.random()) / 3;  // 0.5 근처에 몰리는 분포
+  const spawn = (fresh) => ({ x: 160 + (g() - 0.5) * 220, y: fresh ? 190 : Math.random() * 180, vy: -(0.04 + Math.random() * 0.08), ph: Math.random() * 6.28, sp: 0.004 + Math.random() * 0.006, a: 0.3 + Math.random() * 0.7, big: Math.random() < 0.15 });
+  for (let i = 0; i < N; i++) P.push(spawn(false));
+  let t = 0;
+  const step = () => {
+    t++;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    for (let i = 0; i < P.length; i++) {
+      const d = P[i];
+      d.y += d.vy; d.ph += d.sp;
+      const x = Math.round((d.x + Math.sin(d.ph) * 6) / 1) , y = Math.round(d.y);
+      if (y < -4) P[i] = spawn(true);
+      // 밝기는 천천히 깜빡이고, 빛기둥 중심(x=160)에 가까울수록 밝다
+      const center = 1 - Math.min(1, Math.abs(x - 160) / 130);
+      const al = d.a * (0.55 + 0.45 * Math.sin(d.ph * 3)) * (0.35 + 0.65 * center);
+      ctx.fillStyle = `rgba(214,194,187,${al.toFixed(2)})`;
+      ctx.fillRect(x, y, d.big ? 2 : 1, d.big ? 2 : 1);
+    }
+    dustTimer = requestAnimationFrame(step);
+  };
+  step();
+}
+
+// ---------- 깜빡임: 두 번째 그림이 불규칙하게, 그러나 부드럽게 흐려졌다 돌아온다 ----------
+// 목표 밝기를 0.2~1초마다 무작위로 다시 고르고, 현재 값은 그쪽으로 천천히 따라간다.
+// 급격한 점멸이 없도록 프레임당 변화량을 제한한다.
+let flickerTimer = null;
+function flickerRun(on) {
+  const img = $("introImg");
+  if (flickerTimer) { cancelAnimationFrame(flickerTimer); flickerTimer = null; }
+  img.style.opacity = ""; img.style.filter = "";
+  if (!on) return;
+  let cur = 1, target = 1, nextPick = 0, t = 0;
+  const step = () => {
+    t++;
+    if (t >= nextPick) {
+      // 대체로 밝게(0.85~1), 가끔 깊게 어두워진다(0.35~0.6)
+      target = Math.random() < 0.3 ? 0.35 + Math.random() * 0.25 : 0.85 + Math.random() * 0.15;
+      nextPick = t + 12 + Math.random() * 48;    // 0.2~1초 (60fps 기준)
+    }
+    // 느린 숨결 같은 흔들림을 더하고, 목표로 완만히 이동
+    const breathe = 0.04 * Math.sin(t * 0.021) + 0.025 * Math.sin(t * 0.0077 + 1.3);
+    const want = Math.max(0.3, Math.min(1, target + breathe));
+    cur += (want - cur) * 0.035;
+    img.style.opacity = cur.toFixed(3);
+    img.style.filter = `brightness(${(0.8 + cur * 0.25).toFixed(3)})`;
+    flickerTimer = requestAnimationFrame(step);
+  };
+  step();
+}
+
+// ---------- 눈물: 줄기 없이, 턱 끝에 한 방울 맺혔다가 떨어진다 ----------
+// 좌표는 320x180 캔버스 기준.
+const TEAR = { x: 195, chin: 78, floor: 168 };  // chin: 눈물이 맺히는 지점(얼굴). 이전 줄기 시작점과 같은 높이
+let tearTimer = null;
+function tearRun(on) {
+  const cv = $("dust"), ctx = cv.getContext("2d");
+  if (tearTimer) { cancelAnimationFrame(tearTimer); tearTimer = null; }
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (!on) return;
+  const { x: X, chin: YC, floor: YF } = TEAR;
+  const bone = a => `rgba(214,194,187,${Math.max(0, Math.min(1, a)).toFixed(2)})`;
+  // 상태: wait → form(턱 끝에 맺힘) → fall → splash → wait
+  let phase = "wait", t = 0, until = 40 + Math.random() * 60, y = YC, vy = 0, splash = [];
+  const step = () => {
+    t++;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (phase === "wait") {
+      if (t >= until) { phase = "form"; until = t + 70 + Math.random() * 40; }
+    } else if (phase === "form") {
+      // 맺힘: 희미하게 시작해 또렷해지고, 끝에 2px로 늘어진다
+      const k = Math.min(1, 1 - (until - t) / 110);
+      ctx.fillStyle = bone(0.2 + 0.8 * k); ctx.fillRect(X, YC, 1, k > 0.7 ? 2 : 1);
+      if (t >= until) { phase = "fall"; y = YC; vy = 0.12; }
+    } else if (phase === "fall") {
+      vy = Math.min(2.2, vy + 0.045); y += vy;
+      const yi = Math.round(y);
+      ctx.fillStyle = bone(1); ctx.fillRect(X, yi, 1, 2);
+      ctx.fillStyle = bone(0.4); ctx.fillRect(X, yi - 2, 1, 2);   // 짧은 꼬리
+      if (y >= YF) {
+        phase = "splash"; until = t + 26;
+        splash = [[X - 2, YF], [X + 2, YF], [X - 1, YF - 1], [X + 1, YF - 1], [X, YF + 1]].filter(() => Math.random() < 0.8);
+      }
+    } else if (phase === "splash") {
+      const k = 1 - (t - (until - 26)) / 26;
+      splash.forEach(([sx, sy], i) => { ctx.fillStyle = bone(k * (0.9 - i * 0.12)); ctx.fillRect(sx, sy - Math.round((1 - k) * 2), 1, 1); });
+      if (t >= until) { phase = "wait"; until = t + 90 + Math.random() * 150; }   // 다음 방울까지 1.5~4초
+    }
+    // 바닥의 희미한 물자국 (항상)
+    ctx.fillStyle = bone(0.18 + 0.08 * Math.sin(t * 0.03)); ctx.fillRect(X - 1, YF, 3, 1);
+    tearTimer = requestAnimationFrame(step);
+  };
+  step();
+}
+
+// 스페이스바 = 1년 넘기기. 입력창에 포커스가 있거나 인트로가 떠 있을 때는 예외
+document.addEventListener("keydown", e => {
+  if (e.code !== "Space" || e.repeat) return;
+  const tag = (document.activeElement || {}).tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA") return;
+  e.preventDefault();
+  if ($("intro").classList.contains("on")) { introClick(); return; }
+  if (tourStep >= 0) { tourNext(); return; }   // 튜토리얼 중에는 다음 단계로
+  const b = $("step"); b.classList.add("flash"); setTimeout(() => b.classList.remove("flash"), 90);
+  run(1);
+});
+
+// ---------- 저장 / 이어하기 ----------
+const SAVE_KEY = "brainvat_unlock_save";
+let SAVE_ON = true;   // 불러오기 실패 등으로 꺼둘 때
+function saveGame() {
+  if (!SAVE_ON) return;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(snapshotGame({ spent: SPENT }))); }
+  catch (e) { console.warn("저장 실패", e); }
+}
+function loadGame() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY); if (!raw) return false;
+    const d = JSON.parse(raw); if (!restoreGame(d)) return false;
+  SPENT = (d.extra && d.extra.spent) || 0;
+    if (d.opt && d.opt.prayerWindow) document.getElementById("win").value = d.opt.prayerWindow;
+    return true;
+  } catch (e) { console.warn("불러오기 실패", e); return false; }
+}
+function wipeSave() {
+  if (!confirm("지금까지의 실험을 폐기하고 처음부터 시작합니까? 저장본이 지워집니다.")) return;
+  SAVE_ON = false; localStorage.removeItem(SAVE_KEY); location.reload();
+}
+function exportSave() {
+  const blob = new Blob([JSON.stringify(snapshotGame({ spent: SPENT }))], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `brainvat_${OPT.year}y_${new Date().toISOString().slice(0, 10)}.json`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function importSave(input) {
+  const f = input.files[0]; if (!f) return;
+  f.text().then(t => {
+    const d = JSON.parse(t);
+    if (!d || d.version !== SAVE_VERSION) { alert("맞지 않는 저장본입니다."); return; }
+    localStorage.setItem(SAVE_KEY, t); SAVE_ON = false; location.reload();
+  }).catch(() => alert("파일을 읽지 못했습니다."));
+  input.value = "";
+}
+// 부팅: 저장본이 있으면 이어서, 없으면 새 실험 + 인트로
+if (loadGame()) {
+  render();
+  introBrief(`실험 ${OPT.year}년차에서 이어서.`);
+} else {
+  fillVats(1);
+  render();
+  introStart(false);
+}
+</script>
+</body>
+</html>

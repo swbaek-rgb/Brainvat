@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>Brainvat · 인생 연표 프로토타입</title>
+<style>
+  body { font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; margin: 0; color: #222; background: #fafafa; display: flex; height: 100vh; }
+  #side { width: 340px; padding: 16px; border-right: 1px solid #ddd; background: #fff; overflow-y: auto; flex-shrink: 0; }
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #bar { padding: 12px 16px; border-bottom: 1px solid #ddd; background: #fff; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+  #log { flex: 1; overflow-y: auto; padding: 12px 16px; font-size: 13px; line-height: 1.55; }
+  h1 { font-size: 15px; margin: 0 0 10px; }
+  h2 { font-size: 12px; color: #777; margin: 14px 0 4px; font-weight: normal; border-bottom: 1px solid #eee; }
+  button { font-size: 13px; padding: 5px 12px; cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th, td { text-align: left; padding: 2px 3px; white-space: nowrap; }
+  th { color: #777; font-weight: normal; width: 52px; }
+  .bar { display: inline-block; height: 7px; vertical-align: middle; }
+  .bar.g { background: #cdd; } .bar.p { background: #e94; } .bar.b { background: #cdd; }
+  .num { font-variant-numeric: tabular-nums; color: #555; font-size: 11px; }
+  .y { color: #999; font-size: 11px; display: inline-block; width: 64px; }
+  .ev { margin: 2px 0; }
+  .ev.quiet { color: #bbb; }
+  .ev.luck .n { color: #a60; } .ev.trait .n { color: #357; } .ev.fork .n { color: #639; } .ev.other .n { color: #933; }
+  .n { font-weight: 600; margin-right: 6px; }
+  .d { color: #888; font-size: 11px; margin-left: 6px; }
+  .pray { margin: 6px 0 6px 64px; padding: 8px 10px; background: #fff7e0; border-left: 3px solid #e94; }
+  .pray .q { font-style: italic; }
+  .pray button { margin-top: 6px; }
+  .ans { margin-left: 64px; color: #555; }
+  .ans.grant { color: #2a7; } .ans.deny { color: #c33; } .ans.silence { color: #888; }
+  .cost { margin-left: 64px; color: #96c; font-size: 12px; }
+  .note { margin-left: 64px; color: #444; }
+  .faith { margin-left: 64px; font-size: 11px; color: #a80; }
+  .death { margin: 12px 0; padding: 10px; background: #eee; border-left: 3px solid #333; }
+  .stat { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
+  .stat b { font-weight: 500; }
+  .tag { display: inline-block; background: #eee; border-radius: 3px; padding: 1px 5px; font-size: 11px; margin: 1px; }
+  label { color: #555; }
+  .summary td { white-space: normal; }
+</style>
+</head>
+<body>
+<div id="side">
+  <h1 id="who">—</h1>
+  <div id="stats"></div>
+  <h2>성격 · 지능 · 외모 <span style="float:right">연한색 = 출생 시</span></h2>
+  <table id="traits"></table>
+  <h2>신의 장부</h2>
+  <div id="ledger" class="num"></div>
+  <h2>가정</h2>
+  <div id="home" class="num"></div>
+</div>
+<div id="main">
+  <div id="bar">
+    <button onclick="newLife()">새 인생</button>
+    <button id="b1" onclick="step(1)">1년</button>
+    <button id="b10" onclick="step(10)">10년</button>
+    <button id="bEnd" onclick="step(200)">끝까지</button>
+    <label><input type="checkbox" id="silence"> 부재 중 기도는 침묵으로 처리 (체크 해제 시 기도가 오면 멈춤)</label>
+    <span id="status" style="margin-left:auto;color:#777"></span>
+  </div>
+  <div id="log"></div>
+</div>
+
+<script src="genetics.js"></script>
+<script src="events.js"></script>
+<script>
+// ---------- 시뮬레이터 ----------
+let P = null;        // 현재 사람
+let pending = null;  // 응답 대기 중인 기도
+let running = 0;     // 남은 자동 진행 연수
+
+const AX = ["E", "C", "O", "A", "N"];
+
+// 다른 통들: 신이 함께 관리하는 다른 인생. 이 프로토타입에서는 이름·나이·수명만 가진 그림자다.
+// 기도의 대가는 여기서 수명으로 빠져나가고, 당사자는 그 사실을 모른 채 일찍 죽는다.
+const OTHERS = [];
+function makeOther() {
+  const sex = Math.random() < 0.5 ? "M" : "F";
+  return { name: pick(SURN) + pick(sex === "M" ? GIVEN_M : GIVEN_F), age: 5 + Math.floor(Math.random() * 50), lifespan: Math.round(75 + randn() * 9), debt: 0 };
+}
+while (OTHERS.length < 3) OTHERS.push(makeOther());
+function ageOthers() {
+  for (let i = 0; i < OTHERS.length; i++) {
+    const o = OTHERS[i]; o.age++;
+    if (o.age >= o.lifespan) {
+      if (o.debt > 0) logLine(`<div class="cost">다른 통: ${o.name}이(가) ${o.age}세에 죽었다. 원래는 ${o.age + o.debt}세까지 살 사람이었다. 본인은 끝까지 이유를 몰랐다.</div>`);
+      OTHERS[i] = makeOther(); OTHERS[i].age = 0;
+    }
+  }
+}
+const AXL = { E: "외향성", C: "성실성", O: "개방성", A: "친화성", N: "신경성", iq: "지능", app: "외모" };
+
+const S = { // 사건이 쓰는 헬퍼
+  adj(p, d) { for (const k in d) { p.pheno[k] = clamp(p.pheno[k] + d[k]); } },
+  note(t) { logLine(`<div class="note">${t}</div>`); },
+  cost(t, years = 8) {
+    // 들어준 기도의 대가는 다른 통의 사람에게서 수명으로 떼어 온다. 그 사람은 이유를 모른다.
+    const o = OTHERS[Math.floor(Math.random() * OTHERS.length)];
+    o.lifespan -= years; o.debt += years;
+    const line = `${P.age}세 · ${t} → ${o.name}(${o.age}세)의 수명에서 ${years}년`;
+    P.ledger.push(line); logLine(`<div class="cost">장부: ${line}</div>`);
+  },
+  later(years, fn) { P.queue.push({ at: P.age + years, fn }); },
+  die(p, why) { p.alive = false; p.deathWhy = why; },
+};
+
+function newLife() {
+  const m = makeParent("F"), f = makeParent("M");
+  const c = makeChild(m, f);
+  P = {
+    ...c, m, f, age: 0, alive: true, born: { ...c.pheno },
+    motherName: m.name, motherAlive: true, fatherAlive: true,
+    health: clamp(60 + c.pheno.build * 0.2 + randn() * 8), wealth: c.home.wealth, bond: c.home.warmth,
+    edu: 0, job: 0, spouse: false, child: false,
+    faith: clamp(45 + (m.geno.A + f.geno.A - 100) * 0.15 + (c.pheno.N - 50) * 0.2 + randn() * 8),
+    faithSeed: 0, perceivedGrant: false,
+    fired: {}, queue: [], ledger: [], counts: { ev: 0, pray: 0, grant: 0, deny: 0, silence: 0 },
+  };
+  // 외모 합산치 (얼굴·키·체격 평균)
+  P.pheno.app = Math.round(appScore(c.pheno));
+  P.born.app = P.pheno.app;
+  pending = null; running = 0;
+  document.getElementById("log").innerHTML = "";
+  logLine(`<div class="ev"><span class="y">출생</span>${m.name}(${m.age})과 ${f.name}(${f.age}) 사이에서 ${P.name}이(가) 태어났다. ${describe(c).join(" · ")}</div>`);
+  render();
+}
+
+function step(n) { running = n; loop(); }
+
+function loop() {
+  while (running > 0 && P.alive && !pending) {
+    running--;
+    tickYear();
+  }
+  if (pending && document.getElementById("silence").checked) { answer("silence"); return; }
+  render();
+}
+
+function tickYear() {
+  P.age++;
+  aging();
+  ageOthers();
+  // 예약된 후과
+  P.queue = P.queue.filter(q => { if (q.at <= P.age) { q.fn(P); return false; } return true; });
+  if (!P.alive) { onDeath(); return; }
+
+  // 사건 선택
+  const picks = pickEvents();
+  for (const e of picks) { fire(e); if (pending) break; }
+  if (pending) return;           // 응답 후 answer()에서 mortality() 호출
+  mortality();
+}
+
+function mortality() {
+  const mort = 0.00012 * Math.exp((P.age - 30) / 11) * (1 + Math.max(0, 60 - P.health) / 40);
+  if (P.health <= 0 || Math.random() < mort) { S.die(P, P.health <= 0 ? "몸이 더는 버티지 못했다." : "잠든 채로."); }
+  if (!P.alive) onDeath();
+}
+
+function aging() {
+  const a = P.age;
+  // 지능: 25세까지 환경 몫이 계속 반영되며 굳어감, 60 이후 완만히 하락
+  if (a <= 25) { const target = P.geno.iq * H.iq + P.env.iq * ENV_SHARE.iq + P.luck.iq * (1 - H.iq - ENV_SHARE.iq) + (P.iqEnvAcc || 0); P.pheno.iq = clamp(Math.round(P.pheno.iq + (target - P.pheno.iq) * 0.15)); }
+  else if (a > 60) P.pheno.iq = clamp(P.pheno.iq - (Math.random() < 0.5 ? 1 : 0));
+  // 외모: 22세 정점, 45 이후 하락
+  const peak = P.born.app + 6; // 청춘의 상승분
+  if (a <= 22) P.pheno.app = clamp(Math.round(P.pheno.app + (peak - P.pheno.app) * 0.12));
+  else if (a > 45) P.pheno.app = clamp(P.pheno.app - (Math.random() < 0.7 ? 1 : 0));
+  // 건강: 성실성이 높으면 천천히, 50 이후 가속
+  const decay = a > 50 ? 0.7 + (a - 50) / 35 : a > 30 ? 0.15 : 0;
+  P.health = clamp(P.health - decay * (1.2 - P.pheno.C / 150) + (P.health < 80 && a < 40 ? 0.5 : 0));
+  // 성격: 유전형이 기준점. 매년 4%씩 되돌아감 (사건의 흔적은 남되 영원하진 않음)
+  for (const k of AX) P.pheno[k] += (P.geno[k] - P.pheno[k]) * 0.04;
+  // 성격: 나이 효과 (성숙 원리) 아주 작게
+  if (a >= 20 && a <= 50 && Math.random() < 0.4) S.adj(P, { C: +0.5, A: +0.5, N: -0.5 });
+  // 부모 사망 (자연)
+  if (P.motherAlive && P.age + P.m.age > 75 && Math.random() < 0.06 + (P.age + P.m.age - 75) / 150) { P.motherAlive = false; logLine(`<div class="ev other"><span class="y">${P.age}세</span><span class="n">어머니의 죽음</span>${P.m.name}이(가) 세상을 떠났다.</div>`); S.adj(P, { N: +2, O: +1 }); }
+  if (P.fatherAlive && P.age + P.f.age > 72 && Math.random() < 0.06 + (P.age + P.f.age - 72) / 150) { P.fatherAlive = false; logLine(`<div class="ev other"><span class="y">${P.age}세</span><span class="n">아버지의 죽음</span>${P.f.name}이(가) 세상을 떠났다.</div>`); S.adj(P, { N: +1, C: +1 }); }
+}
+
+function pickEvents() {
+  const cands = EV.filter(e => P.age >= e.age[0] && P.age <= e.age[1] && !(e.once && P.fired[e.id]) && !(e.cooldown && P.fired[e.id] && P.age - P.fired[e.id] < e.cooldown) && !(e.requires && !e.requires(P)));
+  const ws = cands.map(e => e.base * (e.w ? e.w(P) : 1));
+  const draw = () => { let r = Math.random() * ws.reduce((a, b) => a + b, 0); for (let i = 0; i < cands.length; i++) { r -= ws[i]; if (r <= 0) return cands[i]; } return cands[cands.length - 1]; };
+  const first = draw();
+  const out = [first];
+  // 20% 확률로 두 번째 사건 (조용한 해가 아닐 때만)
+  if (first.kind !== "quiet" && Math.random() < 0.2) { const s = draw(); if (s !== first && s.kind !== "quiet") out.push(s); }
+  return out;
+}
+
+function fire(e) {
+  P.fired[e.id] = P.age;
+  if (e.kind !== "quiet") P.counts.ev++;
+  // 효과 적용 (강한 사건은 10% 확률로 두 배 = 인생이 뒤집히는 순간)
+  const mult = Object.values(e.effects || {}).some(v => Math.abs(v) >= 4) && Math.random() < 0.1 ? 2 : 1;
+  const d = {}; for (const k in (e.effects || {})) d[k] = e.effects[k] * mult;
+  S.adj(P, d);
+  if (e.iqEnv) P.iqEnvAcc = (P.iqEnvAcc || 0) + e.iqEnv;
+  if (e.health) P.health = clamp(P.health + e.health);
+  if (e.wealth) P.wealth = clamp(P.wealth + e.wealth);
+  const delta = Object.entries(d).filter(([k, v]) => Math.abs(v) >= 1).map(([k, v]) => `${AXL[k]}${v > 0 ? "+" : ""}${v}`).join(" ");
+  if (e.kind === "quiet") { logLine(`<div class="ev quiet"><span class="y">${P.age}세</span>·</div>`); return; }
+  logLine(`<div class="ev ${e.kind}"><span class="y">${P.age}세</span><span class="n">${e.name}</span>${e.text ? e.text(P) : ""}<span class="d">${delta}${mult > 1 ? " (크게)" : ""}</span></div>`);
+  if (e.onFire) e.onFire(P, S);
+
+  // 기도 발생 판정
+  if (e.prayer) {
+    let prob = e.prayer.prob;
+    if (e.prayer.by !== "parent") prob *= prayerMult();
+    if (Math.random() < prob) { raisePrayer(e); return; }
+    if (e.fallback) e.fallback(P, S);
+  }
+}
+
+// 기도 배율: 성격이 정하는 기본 성향 × 신앙이 정하는 배율
+function prayerMult() {
+  const base = prayerStyle(P).freq;           // 0-100, 신경성↑ 성실성↓
+  const faithMul = 0.4 + (P.faith / 100) * 1.2; // 0.4 ~ 1.6
+  return (0.6 + base / 100) * faithMul;
+}
+
+function raisePrayer(e) {
+  P.counts.pray++;
+  pending = { e, byParent: e.prayer.by === "parent" };
+  logLine(`<div class="pray" id="pray-${P.counts.pray}"><div class="q">🙏 ${e.prayer.text(P)}</div>
+    <div class="num">${pending.byParent ? "부모의 기도" : `본인의 기도 · 신앙 ${Math.round(P.faith)} · 기도 배율 ${prayerMult().toFixed(2)}`}</div>
+    <button onclick="answer('grant')">들어준다</button><button onclick="answer('deny')">거절한다</button><button onclick="answer('silence')">침묵한다</button></div>`);
+}
+
+function answer(kind) {
+  if (!pending) return;
+  const { e, byParent } = pending;
+  const box = document.getElementById(`pray-${P.counts.pray}`);
+  box.querySelectorAll("button").forEach(b => b.remove());
+  pending = null;
+  P.perceivedGrant = false;
+  const before = P.faith;
+
+  if (kind === "grant") {
+    P.counts.grant++;
+    logLine(`<div class="ans grant">신은 들어주었다.</div>`);
+    e.prayer.grant(P, S);
+    // 사람이 그것을 응답으로 느끼는가: 신경성·개방성이 높을수록, 성실성이 높을수록 자기 공으로 돌림
+    const perceive = Math.random() < 0.45 + (P.pheno.N - 50) / 200 + (P.pheno.O - 50) / 250 - (P.pheno.C - 50) / 200;
+    if (byParent) P.faith += 6;
+    else if (perceive) { P.faith += 14; logLine(`<div class="faith">응답받았다고 느꼈다.</div>`); }
+    else { P.faith += 2; logLine(`<div class="faith">자기 힘이라고 생각했다.</div>`); }
+  } else {
+    if (kind === "deny") { P.counts.deny++; logLine(`<div class="ans deny">신은 거절했다.</div>`); }
+    else { P.counts.silence++; logLine(`<div class="ans silence">신은 자리에 없었다.</div>`); }
+    e.prayer.deny(P, S);
+    if (P.perceivedGrant) { P.faith += 10; logLine(`<div class="faith">우연을 응답으로 믿었다.</div>`); }
+    else if (byParent) P.faith -= 3;
+    else P.faith -= kind === "silence" ? 12 : 8 + (P.pheno.N - 50) / 10;
+  }
+  P.faith += P.faithSeed; P.faithSeed = 0;
+  P.faith = clamp(P.faith);
+  if (Math.round(P.faith) !== Math.round(before)) logLine(`<div class="faith">신앙 ${Math.round(before)} → ${Math.round(P.faith)}</div>`);
+  if (!P.alive) { onDeath(); render(); return; }
+  mortality();
+  if (!P.alive) { render(); return; }
+  if (running > 0) loop(); else render();
+}
+
+function onDeath() {
+  running = 0;
+  const c = P.counts, b = P.born, p = P.pheno;
+  const shift = AX.map(k => `${AXL[k]} ${Math.round(b[k])}→${Math.round(p[k])}`).join(" · ");
+  // 마지막 기도
+  let lastPrayer = "";
+  if (P.faith > 25 || Math.random() < 0.3) {
+    const t = P.faith > 60 ? "감사했습니다. 다 감사했습니다." : P.faith > 35 ? "거기 계셨습니까." : "아무도 없다는 걸 압니다. 그래도.";
+    lastPrayer = `<div class="q" style="font-style:italic;margin:6px 0">🙏 마지막 기도: "${t}"</div>`;
+  } else lastPrayer = `<div class="num" style="margin:6px 0">마지막 순간, 기도는 없었다.</div>`;
+  logLine(`<div class="death"><b>${P.name}, ${P.age}세. ${P.deathWhy}</b>${P.painless ? " 고통은 없었다." : ""}${lastPrayer}
+    <table class="summary">
+      <tr><th>사건</th><td>${c.ev}건</td></tr>
+      <tr><th>기도</th><td>${c.pray}회 (들어줌 ${c.grant} · 거절 ${c.deny} · 침묵 ${c.silence})</td></tr>
+      <tr><th>마지막 신앙</th><td>${Math.round(P.faith)}</td></tr>
+      <tr><th>성격 변화</th><td>${shift}</td></tr>
+      <tr><th>장부</th><td>${P.ledger.length ? P.ledger.join("<br>") : "신은 아무 대가도 치르지 않았다."}</td></tr>
+    </table></div>`);
+}
+
+// ---------- 렌더 ----------
+function logLine(html) { const l = document.getElementById("log"); l.insertAdjacentHTML("beforeend", html); l.scrollTop = l.scrollHeight; }
+function bar(v, cls, w = 1.6) { return `<i class="bar ${cls}" style="width:${v * w}px"></i>`; }
+
+function render() {
+  if (!P) return;
+  document.getElementById("who").textContent = `${P.name} · ${P.age}세 ${P.alive ? "" : "(사망)"}`;
+  const st = [["신앙", Math.round(P.faith)], ["건강", Math.round(P.health)], ["재산", Math.round(P.wealth)], ["기도 배율", prayerMult().toFixed(2)],
+    ["학력/직업", ["없음", "낮음", "높음"][P.edu] + " / " + ["없음", "낮음", "높음"][P.job]],
+    ["가족", [P.motherAlive ? "모" : "", P.fatherAlive ? "부" : "", P.spouse ? "배우자" : "", P.child ? "자녀" : ""].filter(Boolean).join(" ") || "—"]];
+  document.getElementById("stats").innerHTML = st.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join("");
+  let rows = "";
+  for (const k of [...AX, "iq", "app"]) {
+    const d = Math.round(P.pheno[k] - P.born[k]);
+    rows += `<tr><th>${AXL[k]}</th><td>${bar(P.born[k], "b")}<br>${bar(P.pheno[k], "p")}</td><td class="num">${Math.round(P.pheno[k])} <span style="color:${d > 0 ? "#2a7" : d < 0 ? "#c33" : "#999"}">${d >= 0 ? "+" : ""}${d}</span></td></tr>`;
+  }
+  document.getElementById("traits").innerHTML = rows;
+  const others = OTHERS.map(o => `<div>${o.name} · ${o.age}세${o.debt ? ` <span style="color:#96c">(빚 ${o.debt}년)</span>` : ""}</div>`).join("");
+  document.getElementById("ledger").innerHTML = `<div style="margin-bottom:6px">${P.ledger.length ? P.ledger.map(x => `<div>${x}</div>`).join("") : "아직 치른 대가 없음"}</div><div style="color:#999">다른 통들</div>${others}`;
+  const h = P.home;
+  document.getElementById("home").innerHTML = `<span class="tag">온기 ${h.warmth}</span><span class="tag">규율 ${h.structure}</span><span class="tag">자극 ${h.stimulus}</span><span class="tag">재산 ${h.wealth}</span><span class="tag">안정 ${Math.round(h.stability)}</span>`;
+  const dis = !P.alive || !!pending;
+  for (const id of ["b1", "b10", "bEnd"]) document.getElementById(id).disabled = dis;
+  document.getElementById("status").textContent = pending ? "기도에 응답을 기다리는 중" : !P.alive ? "이 인생은 끝났다" : "";
+}
+
+newLife();
+</script>
+</body>
+</html>

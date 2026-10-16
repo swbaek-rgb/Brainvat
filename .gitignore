@@ -1,0 +1,7 @@
+.DS_Store
+*.jpg
+prototype/sprites/*_raw.*
+prototype/sprites/*_prev.png
+prototype/sprites/*_x3.png
+prototype/sprites/concept_ui.png
+prototype/sprites/tank_from_concept*
